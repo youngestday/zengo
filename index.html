@@ -46,6 +46,9 @@ body {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;
 }
 .pane .overlay { pointer-events: none; }
+/* 重ねたビフォーは赤みを30%かけて、ライブ映像と見分けやすくする（保存画像には入らない） */
+.overlay img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.overlay .tint { position: absolute; inset: 0; background: rgba(255, 30, 30, 0.3); }
 .tag {
   position: absolute; top: 8px; left: 8px; z-index: 3;
   font-size: 11px; font-weight: 700; letter-spacing: .08em;
@@ -145,7 +148,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <div class="pane" id="paneR">
       <span class="tag" id="tagR">AFTER</span>
       <div class="placeholder" id="phR"><b>アフター</b>先に左側でビフォーを撮るか、<br>写真から選んでください</div>
-      <img class="overlay" id="overlay" alt="" hidden>
+      <div class="overlay" id="overlay" hidden><img id="overlayImg" alt=""><span class="tint"></span></div>
       <div class="flash" id="flashR"></div>
     </div>
   </div>
@@ -425,7 +428,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     beforeCanvas = canvas;
     if (beforeURL) URL.revokeObjectURL(beforeURL);
     beforeURL = URL.createObjectURL(await toBlob(canvas, 0.9));
-    $('beforeImg').src = beforeURL; $('overlay').src = beforeURL;
+    $('beforeImg').src = beforeURL; $('overlayImg').src = beforeURL;
     await go('after');
   }
 
