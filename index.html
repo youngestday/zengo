@@ -107,8 +107,8 @@ body {
 .side { display: contents; }
 .tools { grid-area: tools; display: grid; justify-content: center; gap: 8px; }
 .tool { display: flex; align-items: center; gap: 8px; }
-.tint-btn { width: 60px; height: 34px; min-height: 34px; padding: 0 6px; flex: none; font-size: 12px; font-weight: 700; gap: 5px; }
-.tint-btn.spacer { visibility: hidden; display: inline-block; }
+.tint-btn { width: 76px; height: 34px; min-height: 34px; padding: 0 6px; flex: none; font-size: 12px; font-weight: 700; gap: 5px; }
+.tint-btn.on { background: var(--accent); color: #111; border-color: var(--accent); }
 .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); flex: none; }
 .zone-a { grid-area: a; display: flex; justify-content: center; }
 .zone-b { grid-area: b; display: grid; gap: 6px; justify-items: center; }
@@ -211,7 +211,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
           <label for="threshold">一致 <span id="thresholdVal">80%</span> で撮る</label>
           <input type="range" id="threshold" min="50" max="99" step="1" value="80">
         </div>
-        <span class="tint-btn spacer" aria-hidden="true"></span>
+        <button class="tint-btn" id="guideBtn" aria-pressed="false">ガイドOFF</button>
       </div>
     </div>
     <div class="shutter-cell"><button class="shutter" id="shutter" aria-label="撮影"></button></div>
@@ -268,6 +268,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   ];
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
   let guide = null;
+  let guideOn = false;   // 最初はガイドなしで合わせ、最後の微調整で使う想定。アフター画面に入るたびにOFFから始める
   let threshold = store.get('threshold', 80);
   let beforeFeat = null, matchScore = null, holdSince = 0, afterEnteredAt = 0, shooting = false;
 
@@ -475,6 +476,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('tintName').textContent = tint.name;
     $('tintSwatch').style.background = tint.key === 'none' ? 'transparent' : tint.css.replace(/0\.3\)$/, '1)');
     $('tintBtn').classList.toggle('invis', !isA || !overlayOn);
+    $('guideBtn').textContent = guideOn ? 'ガイドON' : 'ガイドOFF';
+    $('guideBtn').classList.toggle('on', guideOn);
+    $('guideBtn').setAttribute('aria-pressed', String(guideOn));
     $('threshold').value = threshold;
     $('thresholdVal').textContent = threshold + '%';
     renderMatch();
@@ -485,7 +489,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   async function go(next) {
     state = next; clearCamError();
-    if (next === 'after') { afterEnteredAt = performance.now(); matchScore = null; holdSince = 0; guide = null; }
+    if (next === 'after') { afterEnteredAt = performance.now(); matchScore = null; holdSince = 0; guide = null; guideOn = false; }
     render();
     // 完成画面でもカメラは止めない（撮り直しのたびにカメラを起動し直さないため）
     if (next !== 'result' && !cameraAlive()) await startCamera();
@@ -622,7 +626,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   // ガイドの表示。dx>0 は映像の中身が右にずれている＝スマホを右へ。
   function renderGuide() {
     const el = $('guide');
-    el.hidden = state !== 'after' || !guide;
+    el.hidden = state !== 'after' || !guideOn || !guide;
     if (el.hidden) return;
     const items = [];
     const add = (arrow, text, size, cls = '') => items.push(`<span class="g ${cls} ${size >= 2 ? 'big' : ''}"><b>${arrow}</b>${text}</span>`);
@@ -649,7 +653,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const sc = similarity(beforeFeat, live);
     matchScore = matchScore === null ? sc : matchScore * 0.6 + sc * 0.4;
     // ガイドは 2回に1回（約0.3秒ごと）。直前の結果となめらかにつなぐ
-    if (tick++ % 2 === 0) {
+    if (guideOn && tick++ % 2 === 0) {
       const e = estimate(beforeFeat);
       if (e.s < 25) guide = { lost: true };
       else if (!guide || guide.lost) guide = e;
@@ -681,6 +685,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (!frame) { msg('カメラの準備中です。少し待ってからもう一度押してください'); return; }
     if (state === 'before') { flash('flashL'); await setBefore(frame); }
   };
+  $('guideBtn').onclick = () => { guideOn = !guideOn; guide = null; render(); };
   $('tintBtn').onclick = () => { tintIdx = (tintIdx + 1) % TINTS.length; store.set('tint', TINTS[tintIdx].key); render(); };
   $('autoBtn').onclick = () => { autoOn = !autoOn; holdSince = 0; store.set('autoOn', autoOn); render(); };
   $('threshold').oninput = (e) => { threshold = +e.target.value; holdSince = 0; store.set('threshold', threshold); render(); };
