@@ -39,7 +39,7 @@ body {
 /* ステージ */
 .stage { position: relative; container-type: size; min-width: 0; min-height: 0; display: grid; place-items: center; padding: 8px; }
 .pair {
-  width: min(100cqw, 112.5cqh); aspect-ratio: 9 / 8; max-width: 100%;
+  width: min(100cqw, calc(100cqh * var(--pair, 1.125))); aspect-ratio: var(--pair, 1.125); max-width: 100%;
   display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
 }
 .pane { position: relative; overflow: hidden; background: var(--panel); border-radius: 4px; }
@@ -47,9 +47,9 @@ body {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;
 }
 .pane .overlay { pointer-events: none; }
-/* 重ねたビフォーは赤みを30%かけて、ライブ映像と見分けやすくする（保存画像には入らない） */
+/* 重ねたビフォーは色を40%かけて、ライブ映像と見分けやすくする（保存画像には入らない） */
 .overlay img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-.overlay .tint { position: absolute; inset: 0; background: var(--tint, rgba(255, 30, 30, 0.3)); }
+.overlay .tint { position: absolute; inset: 0; background: var(--tint, rgba(255, 30, 30, 0.4)); }
 /* 構図合わせのガイド */
 .guide {
   position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3;
@@ -110,7 +110,8 @@ body {
 .tint-btn { width: 76px; height: 34px; min-height: 34px; padding: 0 6px; flex: none; font-size: 12px; font-weight: 700; gap: 5px; }
 .tint-btn.on { background: var(--accent); color: #111; border-color: var(--accent); }
 .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); flex: none; }
-.zone-a { grid-area: a; display: flex; justify-content: center; }
+.zone-a { grid-area: a; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.ratio-btn { width: 96px; height: 34px; min-height: 34px; padding: 0; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .zone-b { grid-area: b; display: grid; gap: 6px; justify-items: center; }
 .shutter-cell { grid-area: shutter; }
 @media (orientation: landscape) {
@@ -129,6 +130,7 @@ body {
   .tool { flex-direction: column; gap: 6px; }
   .tint-btn { width: 104px; }
   .side { grid-area: side; display: flex; flex-direction: column; gap: 8px; align-self: start; width: 100%; align-items: center; }
+  .zone-a { flex-direction: row; justify-content: center; }
   .zone-b { align-self: start; width: 100%; }
   .zone-b > * { width: 100%; }
   .res { flex-direction: column; align-content: center; }
@@ -216,7 +218,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     </div>
     <div class="shutter-cell"><button class="shutter" id="shutter" aria-label="撮影"></button></div>
     <div class="side">
-    <div class="zone-a"><div class="group lens" id="lens" aria-label="レンズ"></div></div>
+    <div class="zone-a">
+      <div class="group lens" id="lens" aria-label="レンズ"></div>
+      <button class="ratio-btn" id="ratioBtn" aria-label="写真の縦横比を切り替える">比率 16:9</button>
+    </div>
     <div class="zone-b">
       <label class="btn" id="pickBtn">
         <span id="pickLabel">ビフォーを写真から選ぶ</span>
@@ -231,6 +236,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   <div class="res" id="res" hidden>
     <button class="primary" id="saveBtn">保存・共有</button>
     <label class="check" id="labelWrap"><input type="checkbox" id="labelToggle" checked> 文字を入れる</label>
+    <button id="ratioBtn2" aria-label="写真の縦横比を切り替える">比率 16:9</button>
     <button id="retakeAfter">アフター撮り直し</button>
     <button class="small" id="newBtn">最初から</button>
   </div>
@@ -241,7 +247,14 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   const $ = (id) => document.getElementById(id);
   const video = $('video');
   const MAX_H = 2400;          // 1枚あたりの最大の高さ(px)。iPhoneのメモリ上限に余裕を持たせる
-  const AR = 9 / 16;           // 縦長 9:16（標準カメラの16:9と同じ）
+  // 1枚ごとの縦横比（幅／高さ）。どれも縦長
+  const RATIOS = [
+    { key: '169', name: '16:9', ar: 9 / 16 },
+    { key: '43',  name: '4:3',  ar: 3 / 4 },
+    { key: '11',  name: '1:1',  ar: 1 },
+  ];
+  let ratioIdx = Math.max(0, RATIOS.findIndex(r => r.key === (() => { try { return JSON.parse(localStorage.getItem('bacam.ratio')); } catch { return null; } })()));
+  let AR = RATIOS[ratioIdx].ar;
 
   const store = {
     get(k, d) { try { const v = localStorage.getItem('bacam.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
@@ -254,16 +267,16 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   let lensKey = store.get('lens', 'uw');
   let starting = null;
   let beforeCanvas = null, afterCanvas = null;
+  let beforeFull = null, afterFull = null;   // 切り抜く前の写真（比率を後から変えられるように残す）
   let beforeURL = null, resultBlob = null, resultURL = null;
   let overlayOn = store.get('overlayOn', true);
   let opacity = store.get('opacity', 40);
   let msgTimer = null;
   let autoOn = store.get('autoOn', false);
   const TINTS = [
-    { key: 'red',   name: '赤', css: 'rgba(255, 30, 30, 0.3)' },
-    { key: 'blue',  name: '青', css: 'rgba(30, 110, 255, 0.3)' },
-    { key: 'green', name: '緑', css: 'rgba(30, 220, 70, 0.3)' },
-    { key: 'black', name: '黒', css: 'rgba(0, 0, 0, 0.3)' },
+    { key: 'red',   name: '赤', css: 'rgba(255, 30, 30, 0.4)' },
+    { key: 'blue',  name: '青', css: 'rgba(30, 110, 255, 0.4)' },
+    { key: 'green', name: '緑', css: 'rgba(30, 220, 70, 0.4)' },
     { key: 'none',  name: 'なし', css: 'transparent' },
   ];
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
@@ -396,16 +409,27 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     return c;
   }
 
+  // 切り抜かずに、長い辺を MAX_H までに縮めて取っておく
+  function fullCanvas(src, sw, sh) {
+    const s = Math.min(1, MAX_H / Math.max(sw, sh));
+    const c = document.createElement('canvas');
+    c.width = Math.round(sw * s); c.height = Math.round(sh * s);
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+    g.drawImage(src, 0, 0, c.width, c.height);
+    return c;
+  }
+  const cropOf = (c) => cropCover(c, c.width, c.height);
+
   function grabFrame() {
     if (!stream || !video.videoWidth) return null;
-    return cropCover(video, video.videoWidth, video.videoHeight);
+    return fullCanvas(video, video.videoWidth, video.videoHeight);
   }
 
   async function loadFile(file) {
     const url = URL.createObjectURL(file);
     try {
       const img = new Image(); img.src = url; await img.decode();
-      return cropCover(img, img.naturalWidth, img.naturalHeight);
+      return fullCanvas(img, img.naturalWidth, img.naturalHeight);
     } finally { URL.revokeObjectURL(url); }
   }
 
@@ -474,8 +498,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const tint = TINTS[tintIdx];
     $('overlay').style.setProperty('--tint', tint.css);
     $('tintName').textContent = tint.name;
-    $('tintSwatch').style.background = tint.key === 'none' ? 'transparent' : tint.css.replace(/0\.3\)$/, '1)');
+    $('tintSwatch').style.background = tint.key === 'none' ? 'transparent' : tint.css.replace(/0\.4\)$/, '1)');
     $('tintBtn').classList.toggle('invis', !isA || !overlayOn);
+    $('ratioBtn').textContent = '比率 ' + RATIOS[ratioIdx].name;
+    $('ratioBtn2').textContent = '比率 ' + RATIOS[ratioIdx].name;
     $('guideBtn').textContent = guideOn ? 'ガイドON' : 'ガイドOFF';
     $('guideBtn').classList.toggle('on', guideOn);
     $('guideBtn').setAttribute('aria-pressed', String(guideOn));
@@ -495,17 +521,20 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (next !== 'result' && !cameraAlive()) await startCamera();
   }
 
-  async function setBefore(canvas) {
-    beforeCanvas = canvas;
-    beforeFeat = features(canvas, canvas.width, canvas.height);
+  // 画面のビフォーは切り抜く前の写真を枠いっぱいに表示する（枠の比率で自動的に切り抜かれて見える）
+  async function setBefore(full) {
+    beforeFull = full;
+    beforeCanvas = cropOf(full);
+    beforeFeat = features(beforeCanvas, beforeCanvas.width, beforeCanvas.height);
     if (beforeURL) URL.revokeObjectURL(beforeURL);
-    beforeURL = URL.createObjectURL(await toBlob(canvas, 0.9));
+    beforeURL = URL.createObjectURL(await toBlob(full, 0.9));
     $('beforeImg').src = beforeURL; $('overlayImg').src = beforeURL;
     await go('after');
   }
 
-  async function setAfter(canvas) {
-    afterCanvas = canvas;
+  async function setAfter(full) {
+    afterFull = full;
+    afterCanvas = cropOf(full);
     await buildResult();
     await go('result');
   }
@@ -703,7 +732,22 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('overlayBtn').onclick = () => { overlayOn = !overlayOn; store.set('overlayOn', overlayOn); render(); };
   $('redoBefore').onclick = () => go('before');
   $('retakeAfter').onclick = () => go('after');
-  $('newBtn').onclick = () => { beforeCanvas = afterCanvas = null; go('before'); };
+  $('newBtn').onclick = () => { beforeCanvas = afterCanvas = beforeFull = afterFull = null; go('before'); };
+
+  // 比率の切り替え。撮った写真は切り抜く前のものから作り直す
+  function applyRatioCss() { document.documentElement.style.setProperty('--pair', String(AR * 2)); }
+  async function setRatio(idx) {
+    ratioIdx = idx; AR = RATIOS[idx].ar; store.set('ratio', RATIOS[idx].key); applyRatioCss();
+    if (beforeFull) { beforeCanvas = cropOf(beforeFull); beforeFeat = features(beforeCanvas, beforeCanvas.width, beforeCanvas.height); }
+    if (afterFull) afterCanvas = cropOf(afterFull);
+    matchScore = null; guide = null; holdSince = 0;
+    render();
+    if (state === 'result' && beforeCanvas && afterCanvas) await buildResult();
+  }
+  const nextRatio = () => setRatio((ratioIdx + 1) % RATIOS.length);
+  $('ratioBtn').onclick = nextRatio;
+  $('ratioBtn2').onclick = nextRatio;
+  applyRatioCss();
   $('labelToggle').onchange = async (e) => { store.set('labels', e.target.checked); await buildResult(); };
 
   $('saveBtn').onclick = async () => {
