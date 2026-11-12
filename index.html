@@ -19,6 +19,7 @@
   --muted: #9a9da3;
   --accent: #ffd23f;
   --danger: #ff6b5b;
+  --ok: #4ade80;
   --font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
   color-scheme: dark;
 }
@@ -55,6 +56,13 @@ body {
   padding: 3px 8px; border-radius: 99px; background: rgba(0,0,0,.55); color: #fff;
 }
 .tag.live { background: var(--accent); color: #111; }
+/* 自動シャッター用：ビフォーとの一致度 */
+.match {
+  position: absolute; top: 8px; right: 8px; z-index: 3;
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  padding: 3px 8px; border-radius: 99px; background: rgba(0,0,0,.55); color: #fff;
+}
+.match.ok { background: var(--ok); color: #062b12; }
 .placeholder {
   position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px;
   color: var(--muted); padding: 12px; font-size: 13px;
@@ -83,13 +91,14 @@ body {
 }
 .res { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; min-height: 72px; }
 .top { display: contents; }
-.tools { grid-area: tools; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.tools { grid-area: tools; display: grid; justify-content: center; gap: 8px; }
+.tool { display: flex; align-items: center; gap: 12px; }
 .zone-a { grid-area: a; display: flex; justify-content: center; }
 .zone-b { grid-area: b; display: grid; gap: 6px; justify-items: center; }
 .shutter-cell { grid-area: shutter; }
 @media (orientation: landscape) {
   .controls {
-    width: 140px; overflow-y: auto; border-top: 0; border-left: 1px solid var(--line); padding: 10px 8px;
+    width: 236px; overflow-y: auto; border-top: 0; border-left: 1px solid var(--line); padding: 10px 8px;
     display: grid;
   }
   /* 横持ち：シャッターを縦方向のまん中に固定。上にレンズと重ね、下に写真選択 */
@@ -100,7 +109,8 @@ body {
     height: 100%;
   }
   .top { grid-area: top; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 8px; }
-  .tools { flex-direction: column; gap: 8px; }
+  .tools { grid-template-columns: auto auto; gap: 8px; }
+  .tool { flex-direction: column; gap: 6px; }
   .zone-b { align-self: start; width: 100%; }
   .zone-b > * { width: 100%; }
   .res { flex-direction: column; align-content: center; }
@@ -128,7 +138,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   border: 4px solid var(--bg); box-shadow: 0 0 0 3px #fff; flex: none;
 }
 .slider { display: grid; gap: 2px; font-size: 11px; color: var(--muted); text-align: center; width: 140px; }
-@media (orientation: landscape) { .slider { width: 116px; } }
+@media (orientation: landscape) { .slider { width: 104px; } }
 .slider input { width: 100%; accent-color: var(--accent); }
 .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
@@ -149,6 +159,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       <span class="tag" id="tagR">AFTER</span>
       <div class="placeholder" id="phR"><b>アフター</b>先に左側でビフォーを撮るか、<br>写真から選んでください</div>
       <div class="overlay" id="overlay" hidden><img id="overlayImg" alt=""><span class="tint"></span></div>
+      <div class="match" id="match" hidden>一致 --%</div>
       <div class="flash" id="flashR"></div>
     </div>
   </div>
@@ -168,10 +179,19 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   <div class="cap" id="cap">
     <div class="top">
     <div class="tools" id="tools">
-      <button class="overlay-btn on" id="overlayBtn" aria-pressed="true">重ねON</button>
-      <div class="slider" id="opacityWrap">
-        <label for="opacity">重ねる濃さ <span id="opacityVal">40%</span></label>
-        <input type="range" id="opacity" min="0" max="90" step="5" value="40">
+      <div class="tool">
+        <button class="overlay-btn on" id="overlayBtn" aria-pressed="true">重ねON</button>
+        <div class="slider" id="opacityWrap">
+          <label for="opacity">重ねる濃さ <span id="opacityVal">40%</span></label>
+          <input type="range" id="opacity" min="0" max="90" step="5" value="40">
+        </div>
+      </div>
+      <div class="tool">
+        <button class="overlay-btn" id="autoBtn" aria-pressed="false">自動OFF</button>
+        <div class="slider" id="thresholdWrap">
+          <label for="threshold">一致 <span id="thresholdVal">80%</span> で撮る</label>
+          <input type="range" id="threshold" min="50" max="99" step="1" value="80">
+        </div>
       </div>
     </div>
     <div class="zone-a"><div class="group lens" id="lens" aria-label="レンズ"></div></div>
@@ -217,6 +237,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   let overlayOn = store.get('overlayOn', true);
   let opacity = store.get('opacity', 40);
   let msgTimer = null;
+  let autoOn = store.get('autoOn', false);
+  let threshold = store.get('threshold', 80);
+  let beforeFeat = null, matchScore = null, holdSince = 0, afterEnteredAt = 0, shooting = false;
 
   $('labelToggle').checked = store.get('labels', true);
   $('opacity').value = opacity;
@@ -413,19 +436,29 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('cap').hidden = isR; $('res').hidden = !isR;
     $('tools').classList.toggle('invis', !isA);
     $('opacityWrap').classList.toggle('invis', !isA || !overlayOn);
+    $('autoBtn').textContent = autoOn ? '自動ON' : '自動OFF';
+    $('autoBtn').classList.toggle('on', autoOn);
+    $('autoBtn').setAttribute('aria-pressed', String(autoOn));
+    $('thresholdWrap').classList.toggle('invis', !isA || !autoOn);
+    $('threshold').value = threshold;
+    $('thresholdVal').textContent = threshold + '%';
+    renderMatch();
     $('pickLabel').textContent = isB ? 'ビフォーを写真から選ぶ' : 'アフターを写真から選ぶ';
     $('redoBefore').classList.toggle('invis', !isA);
     renderLens();
   }
 
   async function go(next) {
-    state = next; clearCamError(); render();
+    state = next; clearCamError();
+    if (next === 'after') { afterEnteredAt = performance.now(); matchScore = null; holdSince = 0; }
+    render();
     // 完成画面でもカメラは止めない（撮り直しのたびにカメラを起動し直さないため）
     if (next !== 'result' && !cameraAlive()) await startCamera();
   }
 
   async function setBefore(canvas) {
     beforeCanvas = canvas;
+    beforeFeat = features(canvas, canvas.width, canvas.height);
     if (beforeURL) URL.revokeObjectURL(beforeURL);
     beforeURL = URL.createObjectURL(await toBlob(canvas, 0.9));
     $('beforeImg').src = beforeURL; $('overlayImg').src = beforeURL;
@@ -446,13 +479,81 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('resultImg').src = resultURL;
   }
 
+  // ---------- 自動シャッター：ビフォーとの構図の一致度 ----------
+  // 小さく縮めた白黒画像どうしで、明るさの並び（ZNCC）と輪郭の向き（勾配の相関）を比べる。
+  // 片付けで物が減っても、壁・窓・家具の輪郭が合っていれば高くなる。
+  const FW = 36, FH = 64;
+  const fA = document.createElement('canvas'); fA.width = FW * 4; fA.height = FH * 4;
+  const fB = document.createElement('canvas'); fB.width = FW; fB.height = FH;
+  const gA = fA.getContext('2d'), gB = fB.getContext('2d', { willReadFrequently: true });
+  function features(src, sw, sh) {
+    let cw, ch;
+    if (sw / sh > AR) { ch = sh; cw = sh * AR; } else { cw = sw; ch = sw / AR; }
+    gA.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, fA.width, fA.height);
+    gB.drawImage(fA, 0, 0, FW, FH);   // 2段階で縮めて、細かいちらつきをならす
+    const d = gB.getImageData(0, 0, FW, FH).data;
+    const n = FW * FH, g = new Float32Array(n), gx = new Float32Array(n), gy = new Float32Array(n);
+    for (let i = 0; i < n; i++) g[i] = d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+    for (let y = 1; y < FH - 1; y++) for (let x = 1; x < FW - 1; x++) {
+      const i = y * FW + x;
+      gx[i] = g[i + 1] - g[i - 1]; gy[i] = g[i + FW] - g[i - FW];
+    }
+    return { g, gx, gy };
+  }
+  function similarity(a, b) {
+    const n = a.g.length;
+    let ma = 0, mb = 0; for (let i = 0; i < n; i++) { ma += a.g[i]; mb += b.g[i]; } ma /= n; mb /= n;
+    let sab = 0, saa = 0, sbb = 0, gab = 0, gaa = 0, gbb = 0;
+    for (let i = 0; i < n; i++) {
+      const da = a.g[i] - ma, db = b.g[i] - mb;
+      sab += da * db; saa += da * da; sbb += db * db;
+      gab += a.gx[i] * b.gx[i] + a.gy[i] * b.gy[i];
+      gaa += a.gx[i] * a.gx[i] + a.gy[i] * a.gy[i];
+      gbb += b.gx[i] * b.gx[i] + b.gy[i] * b.gy[i];
+    }
+    const zn = saa && sbb ? sab / Math.sqrt(saa * sbb) : 0;
+    const gr = gaa && gbb ? gab / Math.sqrt(gaa * gbb) : 0;
+    return Math.max(0, Math.min(1, 0.5 * zn + 0.5 * gr)) * 100;
+  }
+
+  const HOLD_MS = 600;     // しきい値を超えた状態がこの時間続いたら撮る（手ぶれ防止）
+  const GRACE_MS = 1500;   // アフター画面に入った直後は撮らない
+  function renderMatch() {
+    const el = $('match');
+    el.hidden = state !== 'after' || matchScore === null;
+    if (el.hidden) return;
+    const ok = autoOn && matchScore >= threshold;
+    el.textContent = '一致 ' + Math.round(matchScore) + '%' + (autoOn ? ' / ' + threshold + '%' : '');
+    el.classList.toggle('ok', ok);
+  }
+  setInterval(() => {
+    if (state !== 'after' || !beforeFeat || !stream || !video.videoWidth || shooting || document.hidden) return;
+    const s = similarity(beforeFeat, features(video, video.videoWidth, video.videoHeight));
+    matchScore = matchScore === null ? s : matchScore * 0.6 + s * 0.4;
+    renderMatch();
+    const now = performance.now();
+    if (!autoOn || now - afterEnteredAt < GRACE_MS || matchScore < threshold) { holdSince = 0; return; }
+    if (!holdSince) holdSince = now;
+    if (now - holdSince >= HOLD_MS) shootAfter();
+  }, 150);
+
+  async function shootAfter() {
+    if (shooting) return;
+    const frame = grabFrame();
+    if (!frame) { msg('カメラの準備中です。少し待ってからもう一度押してください'); return; }
+    shooting = true;
+    try { flash('flashR'); await setAfter(frame); } finally { shooting = false; holdSince = 0; }
+  }
+
   // ---------- 操作 ----------
   $('shutter').onclick = async () => {
+    if (state === 'after') return shootAfter();
     const frame = grabFrame();
     if (!frame) { msg('カメラの準備中です。少し待ってからもう一度押してください'); return; }
     if (state === 'before') { flash('flashL'); await setBefore(frame); }
-    else if (state === 'after') { flash('flashR'); await setAfter(frame); }
   };
+  $('autoBtn').onclick = () => { autoOn = !autoOn; holdSince = 0; store.set('autoOn', autoOn); render(); };
+  $('threshold').oninput = (e) => { threshold = +e.target.value; holdSince = 0; store.set('threshold', threshold); render(); };
 
   $('pickInput').onchange = async (e) => {
     const file = e.target.files && e.target.files[0]; e.target.value = '';
