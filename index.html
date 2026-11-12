@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BAカメラ">
+<meta name="theme-color" content="#0e0f10">
+<title>並べてBAカメラ</title>
+<style>
+/* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
+:root {
+  --bg: #0e0f10;
+  --panel: #18191b;
+  --line: #2c2e31;
+  --fg: #f2f2f0;
+  --muted: #9a9da3;
+  --accent: #ffd23f;
+  --danger: #ff6b5b;
+  --font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--fg); font: 14px/1.4 var(--font);
+  overflow: hidden; -webkit-user-select: none; user-select: none;
+  display: grid; grid-template-rows: 1fr auto;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+@media (orientation: landscape) {
+  body { grid-template-rows: none; grid-template-columns: 1fr auto; }
+}
+[hidden] { display: none !important; }
+
+/* ステージ */
+.stage { position: relative; container-type: size; min-width: 0; min-height: 0; display: grid; place-items: center; padding: 8px; }
+.pair {
+  width: min(100cqw, 112.5cqh); aspect-ratio: 9 / 8; max-width: 100%;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+}
+.pane { position: relative; overflow: hidden; background: var(--panel); border-radius: 4px; }
+.pane video, .pane img.photo, .pane .overlay {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.pane .overlay { pointer-events: none; }
+.tag {
+  position: absolute; top: 8px; left: 8px; z-index: 3;
+  font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  padding: 3px 8px; border-radius: 99px; background: rgba(0,0,0,.55); color: #fff;
+}
+.tag.live { background: var(--accent); color: #111; }
+.placeholder {
+  position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px;
+  color: var(--muted); padding: 12px; font-size: 13px;
+}
+.placeholder b { color: var(--fg); font-size: 15px; }
+.flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 4; }
+.flash.on { animation: flash .25s ease-out; }
+@keyframes flash { from { opacity: .85 } to { opacity: 0 } }
+@media (prefers-reduced-motion: reduce) { .flash.on { animation: none; } }
+
+.result { width: 100%; height: 100%; display: grid; place-items: center; gap: 6px; grid-template-rows: 1fr auto; min-height: 0; }
+.result img { max-width: 100%; max-height: 100%; object-fit: contain; min-height: 0; border-radius: 4px; -webkit-user-select: auto; -webkit-touch-callout: default; }
+.hint { color: var(--muted); font-size: 12px; text-align: center; }
+.msg {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 10;
+  background: rgba(20,20,22,.92); border: 1px solid var(--line); padding: 8px 14px; border-radius: 10px;
+  font-size: 13px; max-width: calc(100% - 32px); text-align: center;
+}
+
+/* 操作列 */
+.controls {
+  display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px 12px; background: var(--bg); border-top: 1px solid var(--line);
+}
+@media (orientation: landscape) {
+  .controls {
+    flex-direction: column; flex-wrap: nowrap; width: 132px; overflow-y: auto;
+    border-top: 0; border-left: 1px solid var(--line); padding: 10px 8px;
+  }
+}
+.group { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
+button, .btn {
+  font: inherit; font-size: 13px; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 38px; text-align: center;
+}
+button:focus-visible, .btn:focus-within, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:active, .btn:active { transform: scale(.97); }
+button.on { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 700; }
+button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 700; }
+.lens button { min-width: 48px; border-radius: 99px; font-weight: 700; }
+.shutter {
+  width: 72px; height: 72px; border-radius: 50%; padding: 0; background: #fff;
+  border: 4px solid var(--bg); box-shadow: 0 0 0 3px #fff; flex: none;
+}
+.shutter:disabled { opacity: .4; }
+.slider { display: grid; gap: 2px; font-size: 11px; color: var(--muted); text-align: center; width: 116px; }
+.slider input { width: 100%; accent-color: var(--accent); }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+.btn input[type=file] { display: none; }
+.small { font-size: 12px; padding: 6px 8px; min-height: 32px; color: var(--muted); }
+@media (orientation: landscape) {
+  .controls button, .controls .btn { width: 100%; }
+  .controls .shutter { width: 72px; }
+  .lens button { width: auto !important; }
+}
+</style>
+</head>
+<body>
+
+<main class="stage" id="stage">
+  <div class="pair" id="pair">
+    <div class="pane" id="paneL">
+      <span class="tag" id="tagL">BEFORE</span>
+      <img class="photo" id="beforeImg" alt="ビフォー写真" hidden>
+      <div class="flash" id="flashL"></div>
+    </div>
+    <div class="pane" id="paneR">
+      <span class="tag" id="tagR">AFTER</span>
+      <div class="placeholder" id="phR"><b>アフター</b>先に左側でビフォーを撮るか、<br>写真から選んでください</div>
+      <img class="overlay" id="overlay" alt="" hidden>
+      <div class="flash" id="flashR"></div>
+    </div>
+  </div>
+
+  <div class="result" id="result" hidden>
+    <img id="resultImg" alt="ビフォーアフター画像">
+    <div class="hint" id="resultHint">画像を長押しでも保存できます</div>
+  </div>
+
+  <div class="msg" id="msg" hidden></div>
+</main>
+
+<video id="video" playsinline muted autoplay></video>
+
+<nav class="controls" id="controls">
+  <!-- 撮影中 -->
+  <div class="group lens" id="lens" aria-label="レンズ"></div>
+
+  <div class="slider" id="opacityWrap" hidden>
+    <label for="opacity">重ねる濃さ <span id="opacityVal">40%</span></label>
+    <input type="range" id="opacity" min="0" max="90" step="5" value="40">
+  </div>
+  <button id="overlayBtn" class="on" hidden>重ねる ON</button>
+
+  <button class="shutter" id="shutter" aria-label="撮影"></button>
+
+  <label class="btn" id="pickBtn">
+    <span id="pickLabel">ビフォーを写真から選ぶ</span>
+    <input type="file" id="pickInput" accept="image/*">
+  </label>
+  <button class="small" id="redoBefore" hidden>ビフォーを撮り直す</button>
+
+  <!-- 完成 -->
+  <button class="primary" id="saveBtn" hidden>保存・共有</button>
+  <label class="check" id="labelWrap" hidden><input type="checkbox" id="labelToggle" checked> 文字を入れる</label>
+  <button id="retakeAfter" hidden>アフター撮り直し</button>
+  <button class="small" id="newBtn" hidden>最初から</button>
+</nav>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const video = $('video');
+  const MAX_H = 2400;          // 1枚あたりの最大の高さ(px)。iPhoneのメモリ上限に余裕を持たせる
+  const AR = 9 / 16;           // 縦長 9:16（標準カメラの16:9と同じ）
+
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('bacam.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('bacam.' + k, JSON.stringify(v)); } catch {} },
+  };
+
+  let state = 'before';        // before | after | result
+  let stream = null;
+  let cams = [];               // {id, key, name}
+  let lensKey = store.get('lens', 'uw');
+  let starting = null;
+  let beforeCanvas = null, afterCanvas = null;
+  let beforeURL = null, resultBlob = null, resultURL = null;
+  let overlayOn = store.get('overlayOn', true);
+  let opacity = store.get('opacity', 40);
+  let msgTimer = null;
+
+  $('labelToggle').checked = store.get('labels', true);
+  $('opacity').value = opacity;
+
+  function msg(text, ms = 3500) {
+    const el = $('msg'); el.textContent = text; el.hidden = false;
+    clearTimeout(msgTimer); if (ms) msgTimer = setTimeout(() => el.hidden = true, ms);
+  }
+
+  // ---------- カメラ ----------
+  function classify(label, i) {
+    const l = (label || '').toLowerCase();
+    if (/前面|front|user/.test(l)) return null;
+    if (/超広角|ultra ?wide/.test(l)) return { key: 'uw', name: '0.5x' };
+    if (/デュアル|トリプル|dual|triple/.test(l)) return null;
+    if (/望遠|telephoto/.test(l)) return { key: 'tele', name: '望遠' };
+    if (/背面|back|rear|environment/.test(l)) return { key: 'wide', name: '1x' };
+    return { key: 'cam' + i, name: 'カメラ' + (i + 1) };
+  }
+
+  async function listCams() {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    const out = [], seen = {};
+    devs.forEach((d, i) => {
+      const c = classify(d.label, i); if (!c) return;
+      if (seen[c.key]) { seen[c.key]++; c.key += seen[c.key]; c.name += '-' + seen[c.key]; } else seen[c.key] = 1;
+      out.push({ id: d.deviceId, ...c });
+    });
+    const order = { uw: 0, wide: 1, tele: 2 };
+    out.sort((a, b) => (order[a.key] ?? 9) - (order[b.key] ?? 9));
+    return out;
+  }
+
+  function stopCamera() {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null; video.srcObject = null;
+  }
+
+  async function open(constraint) {
+    stopCamera();
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { ...constraint, width: { ideal: 4032 }, height: { ideal: 3024 } },
+    });
+    video.srcObject = stream;
+    try { await video.play(); } catch {}
+  }
+
+  async function startCamera() {
+    if (starting) return starting;
+    starting = (async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error(location.protocol === 'https:' ? 'このブラウザはカメラに対応していません' : 'https のページで開いてください');
+      }
+      // 前回使ったレンズのIDで直接開き、カメラの起動を1回で済ませる（起動のたびにブラウザの通知が出るため）
+      const want = cams.find(c => c.key === lensKey);
+      const savedId = store.get('camId', null);
+      if (want) await open({ deviceId: { exact: want.id } });
+      else if (savedId) {
+        try { await open({ deviceId: { exact: savedId } }); }
+        catch (e) {
+          if (e.name === 'NotAllowedError' || e.name === 'SecurityError') throw e;
+          await open({ facingMode: { ideal: 'environment' } });
+        }
+      } else await open({ facingMode: { ideal: 'environment' } });
+      if (!cams.length) {
+        cams = await listCams();
+        const cur = stream.getVideoTracks()[0]?.getSettings().deviceId;
+        const pref = cams.find(c => c.key === lensKey) || cams.find(c => c.id === cur) || cams[0];
+        if (pref && pref.id !== cur) await open({ deviceId: { exact: pref.id } });
+        if (pref) lensKey = pref.key;
+      }
+      store.set('camId', (cams.find(c => c.key === lensKey) || {}).id || stream.getVideoTracks()[0]?.getSettings().deviceId || null);
+      renderLens();
+    })().catch(err => {
+      stopCamera();
+      const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+      showCamError(denied
+        ? 'カメラの使用が許可されていません。Chromeはアドレスバー左のアイコン、Safariは「ぁあ」→「Webサイトの設定」から、カメラを「許可」にしてください。'
+        : 'カメラを起動できませんでした（' + (err.message || err.name) + '）');
+    }).finally(() => { starting = null; });
+    return starting;
+  }
+
+  function showCamError(text) {
+    const pane = state === 'before' ? $('paneL') : $('paneR');
+    let ph = pane.querySelector('.camerr');
+    if (!ph) { ph = document.createElement('div'); ph.className = 'placeholder camerr'; pane.appendChild(ph); }
+    ph.innerHTML = '';
+    const b = document.createElement('b'); b.textContent = 'カメラが使えません';
+    const p = document.createElement('div'); p.textContent = text;
+    const p2 = document.createElement('div'); p2.textContent = '「写真から選ぶ」で、標準カメラで撮った写真も使えます。';
+    ph.append(b, p, p2);
+  }
+  function clearCamError() { document.querySelectorAll('.camerr').forEach(e => e.remove()); }
+
+  function renderLens() {
+    const box = $('lens'); box.innerHTML = '';
+    if (cams.length < 2 || state === 'result') return;
+    cams.forEach(c => {
+      const b = document.createElement('button');
+      b.textContent = c.name; b.className = c.key === lensKey ? 'on' : '';
+      b.setAttribute('aria-pressed', c.key === lensKey);
+      b.onclick = async () => {
+        if (c.key === lensKey && stream) return;
+        lensKey = c.key; store.set('lens', lensKey); renderLens();
+        await startCamera();
+      };
+      box.appendChild(b);
+    });
+  }
+
+  // ---------- 画像処理 ----------
+  function cropCover(src, sw, sh) {
+    let cw, ch;
+    if (sw / sh > AR) { ch = sh; cw = sh * AR; } else { cw = sw; ch = sw / AR; }
+    const sx = (sw - cw) / 2, sy = (sh - ch) / 2;
+    const s = Math.min(1, MAX_H / ch);
+    const c = document.createElement('canvas');
+    c.width = Math.round(cw * s); c.height = Math.round(ch * s);
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+    g.drawImage(src, sx, sy, cw, ch, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  function grabFrame() {
+    if (!stream || !video.videoWidth) return null;
+    return cropCover(video, video.videoWidth, video.videoHeight);
+  }
+
+  async function loadFile(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image(); img.src = url; await img.decode();
+      return cropCover(img, img.naturalWidth, img.naturalHeight);
+    } finally { URL.revokeObjectURL(url); }
+  }
+
+  const toBlob = (c, q = 0.92) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('画像を作れませんでした')), 'image/jpeg', q));
+
+  function compose(withLabels) {
+    const H = Math.min(beforeCanvas.height, afterCanvas.height);
+    const W = Math.round(H * AR);
+    const gap = Math.round(W * 0.02);
+    const c = document.createElement('canvas');
+    c.width = W * 2 + gap; c.height = H;
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(beforeCanvas, 0, 0, W, H);
+    g.drawImage(afterCanvas, W + gap, 0, W, H);
+    if (withLabels) {
+      const fs = Math.round(H * 0.05), pad = Math.round(fs * 0.55), m = Math.round(H * 0.03);
+      g.font = `800 ${fs}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
+      g.textBaseline = 'middle';
+      [['BEFORE', 0, 'rgba(0,0,0,0.6)', '#ffffff'], ['AFTER', W + gap, 'rgba(255,210,63,0.95)', '#111111']].forEach(([t, x, bg, fg]) => {
+        const tw = g.measureText(t).width, bw = tw + pad * 2, bh = fs + pad * 1.2, bx = x + m, by = m;
+        g.fillStyle = bg; roundRect(g, bx, by, bw, bh, bh / 2); g.fill();
+        g.fillStyle = fg; g.fillText(t, bx + pad, by + bh / 2 + fs * 0.04);
+      });
+    }
+    return c;
+  }
+  function roundRect(g, x, y, w, h, r) {
+    g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  }
+
+  // ---------- 画面の切り替え ----------
+  function flash(id) { const f = $(id); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); }
+
+  function render() {
+    const isB = state === 'before', isA = state === 'after', isR = state === 'result';
+    $('pair').hidden = isR; $('result').hidden = !isR;
+
+    // ビデオの置き場所
+    if (isB) $('paneL').insertBefore(video, $('beforeImg'));
+    if (isA) $('paneR').insertBefore(video, $('overlay'));
+    video.hidden = isR;
+    if (!isR) video.play().catch(() => {});
+
+    $('beforeImg').hidden = !isA;
+    $('phR').hidden = !isB;
+    $('tagL').classList.toggle('live', isB);
+    $('tagR').classList.toggle('live', isA);
+    $('overlay').hidden = !(isA && overlayOn && beforeURL);
+    $('overlay').style.opacity = opacity / 100;
+    $('opacityVal').textContent = opacity + '%';
+    $('overlayBtn').textContent = overlayOn ? '重ねる ON' : '重ねる OFF';
+    $('overlayBtn').classList.toggle('on', overlayOn);
+
+    $('opacityWrap').hidden = !isA || !overlayOn;
+    $('overlayBtn').hidden = !isA;
+    $('shutter').hidden = isR;
+    $('pickBtn').hidden = isR;
+    $('pickLabel').textContent = isB ? 'ビフォーを写真から選ぶ' : 'アフターを写真から選ぶ';
+    $('redoBefore').hidden = !isA;
+    $('saveBtn').hidden = !isR; $('labelWrap').hidden = !isR;
+    $('retakeAfter').hidden = !isR; $('newBtn').hidden = !isR;
+    renderLens();
+  }
+
+  async function go(next) {
+    state = next; clearCamError(); render();
+    // 完成画面でもカメラは止めない（撮り直しのたびにカメラを起動し直さないため）
+    if (next !== 'result' && !cameraAlive()) await startCamera();
+  }
+
+  async function setBefore(canvas) {
+    beforeCanvas = canvas;
+    if (beforeURL) URL.revokeObjectURL(beforeURL);
+    beforeURL = URL.createObjectURL(await toBlob(canvas, 0.9));
+    $('beforeImg').src = beforeURL; $('overlay').src = beforeURL;
+    await go('after');
+  }
+
+  async function setAfter(canvas) {
+    afterCanvas = canvas;
+    await buildResult();
+    await go('result');
+  }
+
+  async function buildResult() {
+    const c = compose($('labelToggle').checked);
+    resultBlob = await toBlob(c, 0.9);
+    if (resultURL) URL.revokeObjectURL(resultURL);
+    resultURL = URL.createObjectURL(resultBlob);
+    $('resultImg').src = resultURL;
+  }
+
+  // ---------- 操作 ----------
+  $('shutter').onclick = async () => {
+    const frame = grabFrame();
+    if (!frame) { msg('カメラの準備中です。少し待ってからもう一度押してください'); return; }
+    if (state === 'before') { flash('flashL'); await setBefore(frame); }
+    else if (state === 'after') { flash('flashR'); await setAfter(frame); }
+  };
+
+  $('pickInput').onchange = async (e) => {
+    const file = e.target.files && e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    try {
+      const c = await loadFile(file);
+      if (state === 'before') await setBefore(c); else if (state === 'after') await setAfter(c);
+    } catch { msg('この写真は読み込めませんでした。別の写真を選んでください'); }
+  };
+
+  $('opacity').oninput = (e) => { opacity = +e.target.value; store.set('opacity', opacity); render(); };
+  $('overlayBtn').onclick = () => { overlayOn = !overlayOn; store.set('overlayOn', overlayOn); render(); };
+  $('redoBefore').onclick = () => go('before');
+  $('retakeAfter').onclick = () => go('after');
+  $('newBtn').onclick = () => { beforeCanvas = afterCanvas = null; go('before'); };
+  $('labelToggle').onchange = async (e) => { store.set('labels', e.target.checked); await buildResult(); };
+
+  $('saveBtn').onclick = async () => {
+    if (!resultBlob) return;
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    const name = `BA_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.jpg`;
+    const file = new File([resultBlob], name, { type: 'image/jpeg' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return; }
+      catch (err) { if (err.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a'); a.href = resultURL; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    msg('保存できない場合は、画像を長押しして「"写真"に保存」を選んでください', 6000);
+  };
+
+  function cameraAlive() {
+    const t = stream && stream.getVideoTracks()[0];
+    return !!t && t.readyState === 'live';
+  }
+  // アプリに戻ったとき、カメラが止められていた場合だけ起動し直す
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && state !== 'result' && !cameraAlive()) startCamera();
+    if (!document.hidden) video.play().catch(() => {});
+  });
+
+  try { navigator.wakeLock?.request('screen').catch(() => {}); } catch {}
+
+  render();
+  startCamera();
+})();
+</script>
+</body>
+</html>
