@@ -6,9 +6,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="BAカメラ">
+<meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
-<title>並べてBAカメラ</title>
+<title>Zengo</title>
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -71,17 +71,36 @@ body {
   font-size: 13px; max-width: calc(100% - 32px); text-align: center;
 }
 
-/* 操作列 */
-.controls {
-  display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
-  padding: 10px 12px 12px; background: var(--bg); border-top: 1px solid var(--line);
+/* 操作列：ビフォー／アフターで部品の位置が動かないよう、場所を固定したグリッドにする */
+.controls { background: var(--bg); border-top: 1px solid var(--line); padding: 10px 12px 12px; }
+.cap {
+  display: grid; gap: 10px 12px; align-items: center;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas: "tools tools tools" "a shutter b";
 }
+.res { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; min-height: 72px; }
+.tools { grid-area: tools; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.zone-a { grid-area: a; display: flex; justify-content: center; }
+.zone-b { grid-area: b; display: grid; gap: 6px; justify-items: center; }
+.shutter-cell { grid-area: shutter; }
 @media (orientation: landscape) {
   .controls {
-    flex-direction: column; flex-wrap: nowrap; width: 132px; overflow-y: auto;
-    border-top: 0; border-left: 1px solid var(--line); padding: 10px 8px;
+    width: 140px; overflow-y: auto; border-top: 0; border-left: 1px solid var(--line); padding: 10px 8px;
+    display: grid;
   }
+  .cap {
+    grid-template-columns: 1fr; justify-items: center;
+    grid-template-rows: auto auto auto auto; align-content: center; gap: 8px;
+    grid-template-areas: "a" "tools" "shutter" "b";
+    min-height: 100%;
+  }
+  .tools { flex-direction: column; gap: 8px; }
+  .zone-b { align-self: start; width: 100%; }
+  .zone-b > * { width: 100%; }
+  .res { flex-direction: column; align-content: center; }
+  .res > * { width: 100%; }
 }
+.invis { visibility: hidden; }
 .group { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
 button, .btn {
   font: inherit; font-size: 13px; color: var(--fg); background: var(--panel);
@@ -93,22 +112,18 @@ button:active, .btn:active { transform: scale(.97); }
 button.on { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 700; }
 button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 700; }
 .lens button { min-width: 48px; border-radius: 99px; font-weight: 700; }
+.overlay-btn { width: 104px; flex: none; font-weight: 700; }
 .shutter {
   width: 72px; height: 72px; border-radius: 50%; padding: 0; background: #fff;
   border: 4px solid var(--bg); box-shadow: 0 0 0 3px #fff; flex: none;
 }
-.shutter:disabled { opacity: .4; }
-.slider { display: grid; gap: 2px; font-size: 11px; color: var(--muted); text-align: center; width: 116px; }
+.slider { display: grid; gap: 2px; font-size: 11px; color: var(--muted); text-align: center; width: 140px; }
+@media (orientation: landscape) { .slider { width: 116px; } }
 .slider input { width: 100%; accent-color: var(--accent); }
 .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .btn input[type=file] { display: none; }
 .small { font-size: 12px; padding: 6px 8px; min-height: 32px; color: var(--muted); }
-@media (orientation: landscape) {
-  .controls button, .controls .btn { width: 100%; }
-  .controls .shutter { width: 72px; }
-  .lens button { width: auto !important; }
-}
 </style>
 </head>
 <body>
@@ -139,28 +154,33 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 <video id="video" playsinline muted autoplay></video>
 
 <nav class="controls" id="controls">
-  <!-- 撮影中 -->
-  <div class="group lens" id="lens" aria-label="レンズ"></div>
-
-  <div class="slider" id="opacityWrap" hidden>
-    <label for="opacity">重ねる濃さ <span id="opacityVal">40%</span></label>
-    <input type="range" id="opacity" min="0" max="90" step="5" value="40">
+  <!-- 撮影中：どの段階でも同じ場所に同じ部品が来る -->
+  <div class="cap" id="cap">
+    <div class="tools" id="tools">
+      <button class="overlay-btn" id="overlayBtn" aria-pressed="true">重ねるオフ</button>
+      <div class="slider" id="opacityWrap">
+        <label for="opacity">重ねる濃さ <span id="opacityVal">40%</span></label>
+        <input type="range" id="opacity" min="0" max="90" step="5" value="40">
+      </div>
+    </div>
+    <div class="zone-a"><div class="group lens" id="lens" aria-label="レンズ"></div></div>
+    <div class="shutter-cell"><button class="shutter" id="shutter" aria-label="撮影"></button></div>
+    <div class="zone-b">
+      <label class="btn" id="pickBtn">
+        <span id="pickLabel">ビフォーを写真から選ぶ</span>
+        <input type="file" id="pickInput" accept="image/*">
+      </label>
+      <button class="small" id="redoBefore">ビフォーを撮り直す</button>
+    </div>
   </div>
-  <button id="overlayBtn" class="on" hidden>重ねる ON</button>
-
-  <button class="shutter" id="shutter" aria-label="撮影"></button>
-
-  <label class="btn" id="pickBtn">
-    <span id="pickLabel">ビフォーを写真から選ぶ</span>
-    <input type="file" id="pickInput" accept="image/*">
-  </label>
-  <button class="small" id="redoBefore" hidden>ビフォーを撮り直す</button>
 
   <!-- 完成 -->
-  <button class="primary" id="saveBtn" hidden>保存・共有</button>
-  <label class="check" id="labelWrap" hidden><input type="checkbox" id="labelToggle" checked> 文字を入れる</label>
-  <button id="retakeAfter" hidden>アフター撮り直し</button>
-  <button class="small" id="newBtn" hidden>最初から</button>
+  <div class="res" id="res" hidden>
+    <button class="primary" id="saveBtn">保存・共有</button>
+    <label class="check" id="labelWrap"><input type="checkbox" id="labelToggle" checked> 文字を入れる</label>
+    <button id="retakeAfter">アフター撮り直し</button>
+    <button class="small" id="newBtn">最初から</button>
+  </div>
 </nav>
 
 <script>
@@ -372,17 +392,16 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('overlay').hidden = !(isA && overlayOn && beforeURL);
     $('overlay').style.opacity = opacity / 100;
     $('opacityVal').textContent = opacity + '%';
-    $('overlayBtn').textContent = overlayOn ? '重ねる ON' : '重ねる OFF';
-    $('overlayBtn').classList.toggle('on', overlayOn);
+    // ボタンには「押すとどうなるか」を書く
+    $('overlayBtn').textContent = overlayOn ? '重ねるオフ' : '重ねるオン';
+    $('overlayBtn').setAttribute('aria-pressed', String(overlayOn));
 
-    $('opacityWrap').hidden = !isA || !overlayOn;
-    $('overlayBtn').hidden = !isA;
-    $('shutter').hidden = isR;
-    $('pickBtn').hidden = isR;
+    // 見えなくする部品も場所は残す（invis）ので、シャッターやボタンの位置が動かない
+    $('cap').hidden = isR; $('res').hidden = !isR;
+    $('tools').classList.toggle('invis', !isA);
+    $('opacityWrap').classList.toggle('invis', !isA || !overlayOn);
     $('pickLabel').textContent = isB ? 'ビフォーを写真から選ぶ' : 'アフターを写真から選ぶ';
-    $('redoBefore').hidden = !isA;
-    $('saveBtn').hidden = !isR; $('labelWrap').hidden = !isR;
-    $('retakeAfter').hidden = !isR; $('newBtn').hidden = !isR;
+    $('redoBefore').classList.toggle('invis', !isA);
     renderLens();
   }
 
