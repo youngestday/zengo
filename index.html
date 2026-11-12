@@ -203,7 +203,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
         <button class="overlay-btn on" id="overlayBtn" aria-pressed="true">重ねON</button>
         <div class="slider" id="opacityWrap">
           <label for="opacity">重ねる濃さ <span id="opacityVal">40%</span></label>
-          <input type="range" id="opacity" min="0" max="90" step="5" value="40">
+          <input type="range" id="opacity" min="10" max="90" step="10" value="40">
         </div>
         <button class="tint-btn" id="tintBtn" aria-label="重ねる色を切り替える"><span class="swatch" id="tintSwatch"></span><span id="tintName">赤</span></button>
       </div>
@@ -211,7 +211,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
         <button class="overlay-btn" id="autoBtn" aria-pressed="false">自動OFF</button>
         <div class="slider" id="thresholdWrap">
           <label for="threshold">一致 <span id="thresholdVal">80%</span> で撮る</label>
-          <input type="range" id="threshold" min="50" max="99" step="1" value="80">
+          <input type="range" id="threshold" min="50" max="90" step="5" value="80">
         </div>
         <button class="tint-btn" id="guideBtn" aria-pressed="false">ガイドOFF</button>
       </div>
@@ -270,7 +270,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   let beforeFull = null, afterFull = null;   // 切り抜く前の写真（比率を後から変えられるように残す）
   let beforeURL = null, resultBlob = null, resultURL = null;
   let overlayOn = store.get('overlayOn', true);
-  let opacity = store.get('opacity', 40);
+  // 前の版で保存した値も、今の目盛り（範囲と刻み）に合わせる
+  const snap = (v, min, max, step, d) => { v = Number(v); if (!isFinite(v)) v = d; return Math.min(max, Math.max(min, Math.round((v - min) / step) * step + min)); };
+  let opacity = snap(store.get('opacity', 40), 10, 90, 10, 40);
   let msgTimer = null;
   let autoOn = store.get('autoOn', false);
   const TINTS = [
@@ -282,7 +284,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
   let guide = null;
   let guideOn = false;   // 最初はガイドなしで合わせ、最後の微調整で使う想定。アフター画面に入るたびにOFFから始める
-  let threshold = store.get('threshold', 80);
+  let threshold = snap(store.get('threshold', 80), 50, 90, 5, 80);
   let beforeFeat = null, matchScore = null, holdSince = 0, afterEnteredAt = 0, shooting = false;
 
   $('labelToggle').checked = store.get('labels', true);
