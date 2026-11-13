@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-20">
+<meta name="zengo-version" content="2026.11.13-21">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -202,10 +202,10 @@ body {
   display: grid; place-items: center; background: var(--accent); color: #111; box-shadow: 0 2px 8px rgba(0,0,0,.4); cursor: grab;
 }
 .ck-slide.back .ck-knob, .ck-slide.back .ck-label { transition: transform .22s ease-out, opacity .22s ease-out; }
-/* 重なりチェック：ビフォーが手前に浮き、左へドラッグするとビフォーは右へ、アフターは左へ寄って重なる */
+/* 重なりチェック：アフターが手前に浮き、左へドラッグするとビフォーは右へ、アフターは左へ寄って重なる */
 .checker { position: fixed; z-index: 30; pointer-events: none; }
 .checker canvas { position: absolute; top: 0; border-radius: 4px; will-change: transform, opacity; }
-.checker #ckBefore { z-index: 2; box-shadow: 0 10px 28px rgba(0,0,0,.55); transform-origin: center; }
+.checker #ckAfter { z-index: 2; box-shadow: 0 10px 28px rgba(0,0,0,.55); transform-origin: center; }
 .checker.back canvas { transition: transform .22s ease-out, opacity .22s ease-out; }
 .ck-score {
   position: absolute; left: 50%; top: -34px; transform: translateX(-50%); white-space: nowrap;
@@ -853,13 +853,14 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     try { $('ckScore').textContent = '一致 ' + Math.round(matchPercent(beforeFeat, features(afterCanvas, afterCanvas.width, afterCanvas.height))) + '%'; } catch { $('ckScore').textContent = ''; }
     el.classList.remove('back'); el.hidden = false; $('resultImg').classList.add('checking');
     ckSet(0);
-    requestAnimationFrame(() => { $('ckBefore').style.transform = 'translateX(0) scale(1.04)'; });
+    requestAnimationFrame(() => { $('ckAfter').style.transform = 'translateX(0) scale(1.04)'; });
   }
   function ckSet(p) {
     ck.p = p;
-    $('ckBefore').style.transform = 'translateX(' + (p * ck.shift) + 'px) scale(' + (1.04 - 0.04 * p) + ')';
-    $('ckBefore').style.opacity = String(1 - 0.5 * p);
-    $('ckAfter').style.transform = 'translateX(' + (-p * ck.shift) + 'px)';
+    // アフターが手前に浮いて、重なるほど半透明になる
+    $('ckAfter').style.transform = 'translateX(' + (-p * ck.shift) + 'px) scale(' + (1.04 - 0.04 * p) + ')';
+    $('ckAfter').style.opacity = String(1 - 0.5 * p);
+    $('ckBefore').style.transform = 'translateX(' + (p * ck.shift) + 'px)';
   }
   function ckEnd() {
     if (!ck) return;
@@ -867,15 +868,15 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const was = ck.active; ck = null;
     if (!was) return;
     const el = $('checker'); el.classList.add('back');
-    $('ckBefore').style.transform = 'translateX(0) scale(1)'; $('ckBefore').style.opacity = '1'; $('ckAfter').style.transform = 'translateX(0)';
+    $('ckAfter').style.transform = 'translateX(0) scale(1)'; $('ckAfter').style.opacity = '1'; $('ckBefore').style.transform = 'translateX(0)';
     setTimeout(() => { el.hidden = true; el.classList.remove('back'); $('resultImg').classList.remove('checking'); }, 230);
   }
-  // スライダーの長さ：完成画像の下に中央そろえで置き、つまみの中心が
-  // 右端でアフターのまん中、左端でビフォーのまん中に来るようにする（片手で届く短い距離）
+  // スライダーの長さ：完成画像の下に中央そろえで置く。つまみが動く距離は、
+  // アフターのまん中〜ビフォーのまん中の8割（片手で届く短い距離）。端まで滑らせると2枚がぴったり重なる
   function sizeSlider() {
     if (state !== 'result' || !beforeCanvas || !afterCanvas || !$('resultImg').naturalWidth) return;
     const G = ckGeom(), knob = $('ckKnob').offsetWidth || 48;
-    $('ckSlide').style.width = Math.round(G.w + G.gapPx + knob + 8) + 'px';
+    $('ckSlide').style.width = Math.round((G.w + G.gapPx) * 0.8 + knob + 8) + 'px';
   }
   window.addEventListener('resize', sizeSlider);
   // スライダー：つまみ（またはスライダーのどこか）を押すとすぐビフォーが浮き、左へ滑らせた分だけ重なる
@@ -962,15 +963,18 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   // 端末の傾き（deviceorientation）から「画面の上方向」と「カメラの向き」を求める。
   // pitch：カメラが水平より上を向いている角度（+が上）／roll：画面の傾き（+が左に傾いている）
   let tiltNow = null, tiltBefore = null, tiltListening = false, tiltAsked = false;
-  function screenAngle() {
-    const a = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
-    return ((a % 360) + 360) % 360;
+  // 画面の向き（0／90／180／270）。画面が縦長か横長かと、重力がどちら向きかで決める。
+  // iPadでは起動直後に screen.orientation が実際の向きと合わないことがあるため、こちらを使う
+  function angleFor(ux, uy) {
+    const landscape = window.innerWidth > window.innerHeight;
+    if (landscape) return ux >= 0 ? 90 : 270;
+    return uy >= 0 ? 0 : 180;
   }
   function onOrient(e) {
     if (e.beta == null || e.gamma == null) return;
     const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
     const ux = -Math.sin(g) * Math.cos(b), uy = Math.sin(b), uz = Math.cos(g) * Math.cos(b);   // 端末から見た「上」
-    const th = screenAngle() * Math.PI / 180;
+    const th = angleFor(ux, uy) * Math.PI / 180;
     const sx = ux * Math.cos(th) - uy * Math.sin(th), sy = ux * Math.sin(th) + uy * Math.cos(th);
     // 背面カメラは画面の裏側（-z）、インカメは表側（+z）を向いている
     const pitch = Math.asin(Math.max(-1, Math.min(1, facing === 'user' ? uz : -uz))) * 180 / Math.PI;
