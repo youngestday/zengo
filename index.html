@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-5">
+<meta name="zengo-version" content="2026.11.13-6">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -97,15 +97,22 @@ body {
   background: var(--ok); color: #062b12; font-weight: 800; font-size: 18px; padding: 8px 16px; border-radius: 99px; white-space: nowrap;
   box-shadow: 0 4px 16px rgba(0,0,0,.35);
 }
-/* 一度ポンと出てから、ふわっと薄くなって30%で残る */
+/* 自動撮影のカウントダウン：満タンの輪が時計回りに減っていき、なくなったら撮る */
+.count { position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%); z-index: 4; width: 68px; height: 68px; pointer-events: none; }
+.count svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.count circle { fill: rgba(0,0,0,.45); stroke-width: 6; }
+.count .bg { stroke: rgba(255,255,255,.25); }
+.count .fg { fill: none; stroke: var(--ok); stroke-linecap: round; stroke-dasharray: 169.65; stroke-dashoffset: 0; }
+.count span { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
+/* 一度ポンと出てから、ふわっと薄くなって消える */
 .pita.pop { animation: pop 1.8s ease-out forwards; }
 @keyframes pop {
   0%   { transform: translate(-50%, -50%) scale(.6); opacity: 0 }
   12%  { transform: translate(-50%, -50%) scale(1);  opacity: 1 }
   45%  { opacity: 1 }
-  100% { transform: translate(-50%, -50%) scale(1);  opacity: .3 }
+  100% { transform: translate(-50%, -50%) scale(1);  opacity: 0 }
 }
-@media (prefers-reduced-motion: reduce) { .pita.pop { animation: none; opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .pita.pop { animation: none; opacity: 0; } }
 .gear {
   position: absolute; z-index: 6; top: 8px; left: 8px;
   min-height: 32px; padding: 4px 10px; font-size: 12px; border-radius: 99px;
@@ -243,6 +250,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
         <div class="match" id="tilt" hidden></div>
       </div>
       <div class="pita" id="pita" hidden>ピタッ！</div>
+      <div class="count" id="count" hidden aria-live="polite">
+        <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="bg" cx="32" cy="32" r="27"></circle><circle class="fg" id="countArc" cx="32" cy="32" r="27"></circle></svg>
+        <span id="countText">1.5</span>
+      </div>
       <div class="guide" id="guide" hidden></div>
       <div class="flash" id="flashR"></div>
     </div>
@@ -275,7 +286,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
         </div>
       </div>
       <div class="tool">
-        <button class="overlay-btn" id="autoBtn" aria-pressed="false">自動OFF</button>
+        <button class="overlay-btn" id="autoBtn" aria-pressed="false">自動撮影OFF</button>
         <div class="slider" id="thresholdWrap">
           <label for="threshold">一致 <span id="thresholdVal">80%</span> <span id="thresholdWord">でピタッ</span></label>
           <input type="range" id="threshold" min="50" max="90" step="5" value="80">
@@ -576,7 +587,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('cap').hidden = isR; $('res').hidden = !isR;
     $('tools').classList.toggle('invis', !isA);
     $('opacityWrap').classList.toggle('invis', !isA || !overlayOn);
-    $('autoBtn').textContent = autoOn ? '自動ON' : '自動OFF';
+    $('autoBtn').textContent = autoOn ? '自動撮影ON' : '自動撮影OFF';
     $('autoBtn').classList.toggle('on', autoOn);
     $('autoBtn').setAttribute('aria-pressed', String(autoOn));
     $('thresholdWrap').classList.toggle('invis', !isA);
@@ -674,7 +685,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (!settings.shutterSound) return;
     const a = audio(); if (!a) return;
     // スマホのカメラに近い、小さく乾いた「カシャ」：ごく短い高めのクリックを2回（2回目を少し長く）
-    const master = a.createGain(); master.gain.value = 0.32; master.connect(a.destination);
+    const master = a.createGain(); master.gain.value = 0.14; master.connect(a.destination);
     [[0, 0.014, 5200, 0.7], [0.052, 0.03, 3600, 1.0]].forEach(([t0, dur, f, vol]) => {
       const len = Math.ceil(a.sampleRate * dur), buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4);
@@ -966,7 +977,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, matchPercent, FW, FH };
 
-  const HOLD_MS = 600;     // しきい値を超えた状態がこの時間続いたら撮る（手ぶれ防止）
+  const HOLD_MS = 1500;    // しきい値を超えた状態がこの時間続いたら撮る（カウントダウンの長さ）
   const GRACE_MS = 1500;   // アフター画面に入った直後は撮らない
   // 一致度が設定値を超えたら「ピタッ」（緑の枠＋表示＋音）。下がったら（5%の余裕を見て）また鳴らせるようにする
   let aligned = false;
@@ -1034,9 +1045,21 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (!autoOn || now - afterEnteredAt < GRACE_MS || matchScore < threshold) { holdSince = 0; return; }
     // 傾きセンサーが使えるときは、傾きも合っているときだけ自動で撮る
     if (renderTilt() === false) { holdSince = 0; return; }
-    if (!holdSince) holdSince = now;
-    if (now - holdSince >= HOLD_MS) shootAfter();
+    if (!holdSince) { holdSince = now; requestAnimationFrame(countLoop); }
   }, 150);
+
+  // カウントダウンの輪を毎フレーム描き、時間になったら撮る。合わなくなったら（holdSince=0）消す
+  const ARC = 2 * Math.PI * 27;
+  function countLoop() {
+    const el = $('count');
+    if (!holdSince || state !== 'after' || shooting) { el.hidden = true; return; }
+    const left = Math.max(0, HOLD_MS - (performance.now() - holdSince));
+    el.hidden = false;
+    $('countArc').style.strokeDashoffset = String(ARC * (1 - left / HOLD_MS));
+    $('countText').textContent = (left / 1000).toFixed(1);
+    if (left <= 0) { el.hidden = true; shootAfter(); return; }
+    requestAnimationFrame(countLoop);
+  }
 
   async function shootAfter() {
     if (shooting) return;
