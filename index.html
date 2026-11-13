@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-29">
+<meta name="zengo-version" content="2026.11.13-30">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -57,22 +57,21 @@ body {
 /* 動かす方向に合わせて、画面のその方向に出す（上へ＝上のほう、右へ＝右のほう…） */
 .guide { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
 .guide .g {
-  position: absolute; display: flex; flex-direction: column; align-items: center; gap: 1px;
-  padding: 4px 7px; border-radius: 10px; text-align: center; white-space: nowrap;
-  background: rgba(0,0,0,.62); color: #fff; font-size: 11px; font-weight: 700; line-height: 1.15;
+  position: absolute; display: grid; place-items: center; width: 40px; height: 40px; padding: 0;
+  border-radius: 50%; background: rgba(0,0,0,.55); color: #fff;
   transform: translate(-50%, -50%);
 }
 .guide .g.up    { left: 50%; top: 16%; }
-.guide .g.down  { left: 50%; top: auto; bottom: 3px; transform: translateX(-50%); flex-direction: row; gap: 4px; padding: 3px 9px; }
-/* 「下へ」は画面のいちばん下に横並びで出し、傾きのスマホ形の枠と重ならないようにする */
-.guide .g.down b, .guide .g.down.big b { font-size: 16px; }
-.guide .g.left  { left: 4px; top: 50%; transform: translateY(-50%); }
-.guide .g.right { right: 4px; top: 50%; transform: translateY(-50%); }
+.guide .g.down  { left: 50%; top: auto; bottom: 3px; transform: translateX(-50%); width: 34px; height: 30px; border-radius: 12px; }
+/* 「下へ」は画面のいちばん下に小さく出し、傾きのスマホ形の枠と重ならないようにする */
+.guide .g.down b, .guide .g.down.big b { font-size: 22px; }
+.guide .g.left  { left: 4px; top: 40%; transform: translateY(-50%); }
+.guide .g.right { right: 4px; top: 40%; transform: translateY(-50%); }
 .guide .g.rotr  { left: 62%; top: 50%; }
 .guide .g.rotl  { left: 38%; top: 50%; }
 .guide .g.mid   { left: 50%; top: 50%; }
-.guide .g b { font-size: 20px; line-height: 1; color: var(--accent); }
-.guide .g.big b { font-size: 28px; }
+.guide .g b { font-size: 24px; line-height: 1; font-weight: 800; color: var(--accent); }
+.guide .g.big b { font-size: 34px; }
 .guide .g.ok { background: var(--ok); color: #062b12; }
 .guide .g.ok b { color: #062b12; }
 .guide .g.weak { color: #ccc; }
@@ -422,8 +421,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <label class="row"><span><b>シャッター音</b><small>撮影したときに「カシャ」と鳴らす</small></span><input type="checkbox" id="setShutter"></label>
     <div class="row"><span><b>ビフォーの自動撮影までの時間</b><small>水平・垂直がそろってから撮るまで。じっくり構えたいときは長めに</small></span>
       <span class="sec"><input type="range" id="setCountB" min="0.5" max="2" step="0.1" value="1"><output id="setCountBVal">1.0秒</output></span></div>
-    <div class="row"><span><b>アフターの自動撮影までの時間</b><small>ビフォーと合ってから撮るまで（輪が減る時間）</small></span>
-      <span class="sec"><input type="range" id="setCount" min="0.3" max="1" step="0.1" value="0.5"><output id="setCountVal">0.5秒</output></span></div>
     <label class="row"><span><b>グリッド</b><small>カメラの上に 3×3 の線を出す</small></span><input type="checkbox" id="setGrid"></label>
     <label class="row"><span><b>四隅（手前）も合わせる</b><small>天井や壁だけでなく、画面の四隅の家具や床の輪郭も一致度に入れる。立ち位置まで合わせられる。手前の家具を動かす片付けではOFFに</small></span><input type="checkbox" id="setCorners"></label>
     <label class="row"><span><b>水平・垂直ガイド</b><small>まん中の線が左右の傾きで回り（水平で黄色の1本に）、下のスマホ形の枠が前後の傾きで台形になる（まっすぐ立つと黄色に）</small></span><input type="checkbox" id="setLevel"></label>
@@ -475,7 +472,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
   const settings = { ping: store.get('setPing', true), shutterSound: store.get('setShutter', true), tilt: store.get('setTilt', true),
     // 範囲と初期値を変えたので、保存先の名前も変えて初期値から始める
-    countSec: Math.round(snap(store.get('setCountA2', 0.5), 0.3, 1, 0.1, 0.5) * 10) / 10,
+    countSec: 0.3,   // アフターは最後の微調整でほぼブレないので、ピタッから0.3秒で撮る（固定）
     countBefore: Math.round(snap(store.get('setCountB2', 1), 0.5, 2, 0.1, 1) * 10) / 10,
     grid: store.get('setGrid', true), level: store.get('setLevel', true), corners: store.get('setCorners', true) };
   const lineMode = true;   // 撮影中はビフォーの輪郭の線だけを重ねる（写真の重ね合わせは完成画面の確認で使う）
@@ -1460,18 +1457,24 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     el.hidden = state !== 'after' || !guideOn || !guide;
     if (el.hidden) return;
     const items = [];
-    const add = (arrow, text, size, cls = '') => items.push(`<span class="g ${cls} ${size >= 2 ? 'big' : ''}"><b>${arrow}</b>${text}</span>`);
-    if (guide.lost) { el.innerHTML = '<span class="g mid weak">ビフォーの景色を<br>画面に入れてください</span>'; return; }
+    // 線画に集中できるよう、文字は出さず矢印だけにする（大きくずれているときは矢印も大きく）
+    const add = (arrow, text, size, cls = '') => items.push(`<span class="g ${cls} ${size >= 2 ? 'big' : ''}" aria-label="${text}"><b>${arrow}</b></span>`);
+    if (guide.lost) { el.innerHTML = ''; return; }   // 見失ったときは何も出さない（文字で邪魔をしない）
     const sx = Math.abs(guide.dx) / FW * 100, sy = Math.abs(guide.dy) / FH * 100;   // 画面に対するずれ（%）
     const lvl = (v, a, b) => v < a ? 0 : v < b ? 1 : 2;
     const lx = lvl(sx, 4, 12), ly = lvl(sy, 3, 10);
     if (ly) add(guide.dy < 0 ? '↑' : '↓', guide.dy < 0 ? '上へ' : '下へ', ly, guide.dy < 0 ? 'up' : 'down');
     if (lx) add(guide.dx < 0 ? '←' : '→', guide.dx < 0 ? '左へ' : '右へ', lx, guide.dx < 0 ? 'left' : 'right');
-    // ガイドは 上へ・下へ・左へ・右へ の4つだけ（前後は出さない。傾きは水平・垂直ガイドで合わせる）
+    // ガイドは ↑↓←→ の4つの矢印だけ（前後は出さない。傾きは水平・垂直ガイドで合わせる）
     el.innerHTML = items.join('');
   }
 
   let tick = 0, lineTick = 0, lastLive = null;
+  const TILT_ROLL = 5, TILT_PITCH = 7;
+  function roughlyLevel() {
+    if (!tiltNow) return true;   // センサーが使えないときは傾きを条件にしない
+    return Math.abs(tiltNow.pitch) <= TILT_PITCH && (tiltNow.roll == null || Math.abs(tiltNow.roll) <= TILT_ROLL);
+  }
   function combineLive(L) {
     const v = [];
     if (L.line != null) v.push(L.line);
@@ -1501,9 +1504,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     renderMatch();
     const now = performance.now();
     if (!autoOn || now - afterEnteredAt < GRACE_MS || matchScore < threshold) { holdSince = 0; return; }
-    // ビフォーをまっすぐ（水平・垂直）で撮っていたら、アフターも水平・垂直がそろっているときだけ撮る
+    // 位置・画角合わせが主役。ビフォーをまっすぐ（水平・垂直）で撮っていても、アフターは
+    // 大きく傾いていなければ撮る（左右 TILT_ROLL 度・前後 TILT_PITCH 度まで。気に入らなければ撮り直せばよい）
     const beforeUpright = tiltBefore && Math.abs(tiltBefore.pitch) < 2 && tiltBefore.roll != null && Math.abs(tiltBefore.roll) < 1.5;
-    if (beforeUpright && settings.level && !levelOk) { holdSince = 0; return; }
+    if (beforeUpright && settings.level && !roughlyLevel()) { holdSince = 0; return; }
     if (!holdSince) { holdSince = now; requestAnimationFrame(countLoop); }
   }, 150);
 
@@ -1567,11 +1571,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   // 設定画面
   const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setGrid', 'grid'], ['setCorners', 'corners'], ['setLevel', 'level']];
   const showCount = () => {
-    $('setCount').value = settings.countSec; $('setCountVal').textContent = settings.countSec.toFixed(1) + '秒';
     $('setCountB').value = settings.countBefore; $('setCountBVal').textContent = settings.countBefore.toFixed(1) + '秒';
   };
   $('setCountB').oninput = (e) => { settings.countBefore = Math.round(snap(e.target.value, 0.5, 2, 0.1, 1) * 10) / 10; store.set('setCountB2', settings.countBefore); showCount(); };
-  $('setCount').oninput = (e) => { settings.countSec = Math.round(snap(e.target.value, 0.3, 1, 0.1, 0.5) * 10) / 10; store.set('setCountA2', settings.countSec); showCount(); };
   $('gearBtn').onclick = () => { SET.forEach(([id, k]) => $(id).checked = settings[k]); showCount(); $('sheet').hidden = false; $('sheetClose').focus(); };
   SET.forEach(([id, k]) => $(id).onchange = (e) => {
     settings[k] = e.target.checked; store.set(id, settings[k]);
@@ -1585,7 +1587,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) $('sheet').hidden = true; });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('sheet').hidden = true; });
   if (location.hash === '#test') window.__guide = { set(v) { guide = v; guideOn = true; render(); renderGuide(); } };
-  if (location.hash === '#test') window.__tilt = { onOrient, get now() { return tiltNow; }, set before(v) { tiltBefore = v; } };
+  if (location.hash === '#test') window.__tilt = { onOrient, get now() { return tiltNow; }, set now(v) { tiltNow = v; updateLevel(); }, set before(v) { tiltBefore = v; } };
 
   $('guideBtn').onclick = () => { guideOn = !guideOn; guide = null; render(); };
   $('tintBtn').onclick = () => { tintIdx = (tintIdx + 1) % TINTS.length; store.set('tint', TINTS[tintIdx].key); render(); };
