@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-19">
+<meta name="zengo-version" content="2026.11.13-20">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -189,7 +189,7 @@ body {
 .result img.checking { opacity: 0; }
 /* 重なりチェックのスライダー（iPhoneの「スライドで電源オフ」のように、右のつまみを左へ滑らせる） */
 .ck-slide {
-  position: relative; width: min(100%, 340px); height: 56px; border-radius: 99px; flex: none;
+  position: relative; width: 240px; max-width: 100%; height: 56px; border-radius: 99px; flex: none;
   background: var(--panel); border: 1px solid var(--line); touch-action: none; -webkit-touch-callout: none; user-select: none;
 }
 .ck-label {
@@ -224,7 +224,7 @@ body {
 .cap {
   display: grid; gap: 10px 12px; align-items: center;
   grid-template-columns: 1fr auto 1fr;
-  grid-template-areas: "tools tools tools" "a shutter b";
+  grid-template-areas: "tools tools tools" "b shutter a";
 }
 .res { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; min-height: 72px; }
 .side { display: contents; }
@@ -338,8 +338,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   <div class="result" id="result" hidden>
     <img id="resultImg" alt="ビフォーアフター画像" draggable="false">
     <div class="ck-slide" id="ckSlide" role="slider" aria-label="重なりチェック：つまみを左へスライドすると、ビフォーとアフターが重なります" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-      <span class="ck-label" id="ckLabel"><b>‹‹</b> スライドで重なりチェック</span>
-      <span class="ck-knob" id="ckKnob"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="10" height="12" rx="1.5"/><rect x="11" y="6" width="10" height="12" rx="1.5" opacity=".55"/></svg></span>
+      <span class="ck-label" id="ckLabel">重なりチェック</span>
+      <span class="ck-knob" id="ckKnob"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg></span>
     </div>
   </div>
 
@@ -823,6 +823,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (resultURL) URL.revokeObjectURL(resultURL);
     resultURL = URL.createObjectURL(resultBlob);
     $('resultImg').src = resultURL;
+    $('resultImg').onload = sizeSlider;
   }
 
   // ---------- 完成画面：重ねて確認 ----------
@@ -869,6 +870,14 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('ckBefore').style.transform = 'translateX(0) scale(1)'; $('ckBefore').style.opacity = '1'; $('ckAfter').style.transform = 'translateX(0)';
     setTimeout(() => { el.hidden = true; el.classList.remove('back'); $('resultImg').classList.remove('checking'); }, 230);
   }
+  // スライダーの長さ：完成画像の下に中央そろえで置き、つまみの中心が
+  // 右端でアフターのまん中、左端でビフォーのまん中に来るようにする（片手で届く短い距離）
+  function sizeSlider() {
+    if (state !== 'result' || !beforeCanvas || !afterCanvas || !$('resultImg').naturalWidth) return;
+    const G = ckGeom(), knob = $('ckKnob').offsetWidth || 48;
+    $('ckSlide').style.width = Math.round(G.w + G.gapPx + knob + 8) + 'px';
+  }
+  window.addEventListener('resize', sizeSlider);
   // スライダー：つまみ（またはスライダーのどこか）を押すとすぐビフォーが浮き、左へ滑らせた分だけ重なる
   {
     const t = $('ckSlide'), knob = $('ckKnob'), label = $('ckLabel');
