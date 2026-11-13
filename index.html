@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
+<meta name="zengo-version" content="2026.11.13-4">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -104,6 +105,12 @@ body {
   min-height: 32px; padding: 4px 10px; font-size: 12px; border-radius: 99px;
   background: rgba(24,25,27,.85);
 }
+.update {
+  position: absolute; left: 50%; top: 8px; transform: translateX(-50%); z-index: 20;
+  display: flex; align-items: center; gap: 10px; white-space: nowrap;
+  background: rgba(20,20,22,.95); border: 1px solid var(--accent); border-radius: 12px; padding: 6px 6px 6px 12px; font-size: 13px;
+}
+.update button { min-height: 32px; padding: 4px 12px; }
 .sheet-back { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; }
 .sheet {
   width: min(420px, 100%); max-height: 100%; overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
@@ -241,6 +248,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   </div>
 
   <div class="msg" id="msg" hidden></div>
+  <div class="update" id="update" hidden>新しい版があります <button class="primary" id="updateBtn" type="button">更新する</button></div>
 </main>
 
 <video id="video" playsinline muted autoplay></video>
@@ -303,6 +311,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <label class="row"><span><b>シャッター音</b><small>撮影したときに「カシャ」と鳴らす</small></span><input type="checkbox" id="setShutter"></label>
     <label class="row"><span><b>傾きセンサー</b><small>ビフォーを撮ったときのスマホの傾きと比べて表示する</small></span><input type="checkbox" id="setTilt"></label>
     <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。<br>傾きは、このアプリのカメラでビフォーを撮ったときだけ比べられます（写真から選んだビフォーには傾きの記録がありません）。</p>
+    <p class="note">版：<span id="verText"></span>　<button class="small" id="checkUpdate" type="button">新しい版を確認</button></p>
     <button class="primary" id="sheetClose">閉じる</button>
   </div>
 </div>
@@ -1036,6 +1045,25 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       playShutter(); flash('flashL'); await setBefore(frame);
     }
   };
+  // ---------- 新しい版の確認 ----------
+  // ホーム画面から開いたアプリは古いページを覚えたままになりやすいので、起動時と画面に戻ったときに確認する
+  const myVer = document.querySelector('meta[name="zengo-version"]').content;
+  $('verText').textContent = myVer;
+  async function checkUpdate(showResult) {
+    try {
+      const r = await fetch(location.pathname + '?check=' + Date.now(), { cache: 'no-store' });
+      const t = await r.text();
+      const m = t.match(/name="zengo-version" content="([^"]+)"/);
+      if (m && m[1] !== myVer) { $('update').hidden = false; return true; }
+      if (showResult) msg('最新の版です（' + myVer + '）');
+    } catch { if (showResult) msg('確認できませんでした。電波のよい場所でもう一度お試しください'); }
+    return false;
+  }
+  $('updateBtn').onclick = () => { location.replace(location.pathname + '?v=' + Date.now()); };
+  $('checkUpdate').onclick = () => checkUpdate(true);
+  checkUpdate(false);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(false); });
+
   // 設定画面
   const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setTilt', 'tilt']];
   $('gearBtn').onclick = () => { SET.forEach(([id, k]) => $(id).checked = settings[k]); $('sheet').hidden = false; $('sheetClose').focus(); };
