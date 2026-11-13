@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-28">
+<meta name="zengo-version" content="2026.11.13-29">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -63,11 +63,11 @@ body {
   transform: translate(-50%, -50%);
 }
 .guide .g.up    { left: 50%; top: 16%; }
-.guide .g.down  { left: 50%; top: 88%; }
+.guide .g.down  { left: 50%; top: auto; bottom: 3px; transform: translateX(-50%); flex-direction: row; gap: 4px; padding: 3px 9px; }
+/* 「下へ」は画面のいちばん下に横並びで出し、傾きのスマホ形の枠と重ならないようにする */
+.guide .g.down b, .guide .g.down.big b { font-size: 16px; }
 .guide .g.left  { left: 4px; top: 50%; transform: translateY(-50%); }
 .guide .g.right { right: 4px; top: 50%; transform: translateY(-50%); }
-.guide .g.fwd   { left: 50%; top: 32%; }
-.guide .g.back  { left: 50%; top: 68%; }
 .guide .g.rotr  { left: 62%; top: 50%; }
 .guide .g.rotl  { left: 38%; top: 50%; }
 .guide .g.mid   { left: 50%; top: 50%; }
@@ -148,7 +148,7 @@ body {
 /* 前後の傾き：グリッドのまん中の列・一番下の段のマスに、スマホの形の角丸の枠。
    カメラが上を向くと上が広い台形、下を向くと下が広い台形になり、まっすぐ立つと長方形で黄色になる */
 .phone-frame {
-  position: absolute; left: 50%; top: 83.333%; width: 17%; height: 23%;
+  position: absolute; left: 50%; top: 76%; width: 14%; height: 18%;
   border: 2px solid rgba(255,255,255,.9); border-radius: 10px; box-shadow: 0 0 3px rgba(0,0,0,.5);
   transform: translate(-50%, -50%) perspective(160px) rotateX(var(--px, 0deg)); transition: transform .08s linear;
 }
@@ -1467,10 +1467,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const lx = lvl(sx, 4, 12), ly = lvl(sy, 3, 10);
     if (ly) add(guide.dy < 0 ? '↑' : '↓', guide.dy < 0 ? '上へ' : '下へ', ly, guide.dy < 0 ? 'up' : 'down');
     if (lx) add(guide.dx < 0 ? '←' : '→', guide.dx < 0 ? '左へ' : '右へ', lx, guide.dx < 0 ? 'left' : 'right');
-    const zs = Math.abs(Math.log(guide.scale)) * 100;                                    // 大きさの違い（%）
-    const lz = lvl(zs, 5, 12);
-    if (lz) add(guide.scale > 1 ? '⇡' : '⇣', guide.scale > 1 ? '前へ' : '後ろへ', lz, guide.scale > 1 ? 'fwd' : 'back');
-    // ガイドは 上へ・下へ・左へ・右へ・前へ・後ろへ の6つだけ（傾きは水平・垂直ガイドで合わせる）
+    // ガイドは 上へ・下へ・左へ・右へ の4つだけ（前後は出さない。傾きは水平・垂直ガイドで合わせる）
     el.innerHTML = items.join('');
   }
 
