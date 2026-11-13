@@ -2,7 +2,7 @@
 
 左にビフォー写真、右にカメラのライブ映像を並べて撮影し、ビフォーアフター画像を1枚で保存するWebアプリです。
 
-公開URL：https://youngestday.github.io/ba-camera/
+公開URL：https://youngestday.github.io/zengo/
 
 ## できること
 
