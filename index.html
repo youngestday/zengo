@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-18">
+<meta name="zengo-version" content="2026.11.13-19">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -184,15 +184,25 @@ body {
 @keyframes flash { from { opacity: .85 } to { opacity: 0 } }
 @media (prefers-reduced-motion: reduce) { .flash.on { animation: none; } }
 
-.result { width: 100%; height: 100%; display: grid; place-items: center; gap: 6px; grid-template-rows: 1fr auto; min-height: 0; }
-.result img { max-width: 100%; max-height: 100%; object-fit: contain; min-height: 0; border-radius: 4px; -webkit-touch-callout: none; touch-action: none; }
+.result { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; }
+.result img { max-width: 100%; max-height: calc(100% - 70px); object-fit: contain; min-height: 0; border-radius: 4px; -webkit-touch-callout: none; touch-action: none; }
 .result img.checking { opacity: 0; }
-.ck-bar {
-  display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 99px; border: 1px solid var(--line);
-  color: var(--muted); font-size: 12px; touch-action: none; -webkit-touch-callout: none;
+/* 重なりチェックのスライダー（iPhoneの「スライドで電源オフ」のように、右のつまみを左へ滑らせる） */
+.ck-slide {
+  position: relative; width: min(100%, 340px); height: 56px; border-radius: 99px; flex: none;
+  background: var(--panel); border: 1px solid var(--line); touch-action: none; -webkit-touch-callout: none; user-select: none;
 }
-.ck-bar b { color: var(--accent); font-size: 16px; }
-/* 重ねて確認：ビフォーが手前に浮き、左へドラッグするとビフォーは右へ、アフターは左へ寄って重なる */
+.ck-label {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-right: 48px;
+  color: var(--muted); font-size: 14px; font-weight: 700; letter-spacing: .04em; pointer-events: none;
+}
+.ck-label b { color: var(--accent); margin-right: 6px; letter-spacing: -.1em; }
+.ck-knob {
+  position: absolute; right: 4px; top: 4px; width: 48px; height: 48px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--accent); color: #111; box-shadow: 0 2px 8px rgba(0,0,0,.4); cursor: grab;
+}
+.ck-slide.back .ck-knob, .ck-slide.back .ck-label { transition: transform .22s ease-out, opacity .22s ease-out; }
+/* 重なりチェック：ビフォーが手前に浮き、左へドラッグするとビフォーは右へ、アフターは左へ寄って重なる */
 .checker { position: fixed; z-index: 30; pointer-events: none; }
 .checker canvas { position: absolute; top: 0; border-radius: 4px; will-change: transform, opacity; }
 .checker #ckBefore { z-index: 2; box-shadow: 0 10px 28px rgba(0,0,0,.55); transform-origin: center; }
@@ -327,7 +337,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   <div class="result" id="result" hidden>
     <img id="resultImg" alt="ビフォーアフター画像" draggable="false">
-    <div class="ck-bar" id="ckBar"><b>⇠</b> 長押しして左へドラッグすると、重ねて確認できます</div>
+    <div class="ck-slide" id="ckSlide" role="slider" aria-label="重なりチェック：つまみを左へスライドすると、ビフォーとアフターが重なります" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <span class="ck-label" id="ckLabel"><b>‹‹</b> スライドで重なりチェック</span>
+      <span class="ck-knob" id="ckKnob"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="10" height="12" rx="1.5"/><rect x="11" y="6" width="10" height="12" rx="1.5" opacity=".55"/></svg></span>
+    </div>
   </div>
 
   <div class="msg" id="msg" hidden></div>
@@ -856,24 +869,34 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('ckBefore').style.transform = 'translateX(0) scale(1)'; $('ckBefore').style.opacity = '1'; $('ckAfter').style.transform = 'translateX(0)';
     setTimeout(() => { el.hidden = true; el.classList.remove('back'); $('resultImg').classList.remove('checking'); }, 230);
   }
-  ['resultImg', 'ckBar'].forEach(id => {
-    const t = $(id);
+  // スライダー：つまみ（またはスライダーのどこか）を押すとすぐビフォーが浮き、左へ滑らせた分だけ重なる
+  {
+    const t = $('ckSlide'), knob = $('ckKnob'), label = $('ckLabel');
+    const travel = () => t.clientWidth - knob.offsetWidth - 8;
     t.addEventListener('pointerdown', (e) => {
-      if (state !== 'result') return;
+      if (state !== 'result' || !beforeCanvas || !afterCanvas) return;
       e.preventDefault();
       try { t.setPointerCapture(e.pointerId); } catch {}
+      t.classList.remove('back');
       ck = { x0: e.clientX, y0: e.clientY, active: false, p: 0, shift: 1 };
-      ck.timer = setTimeout(ckActivate, 300);
+      ckActivate();
     });
     t.addEventListener('pointermove', (e) => {
-      if (!ck) return;
-      const dx = e.clientX - ck.x0, dy = e.clientY - ck.y0;
-      if (!ck.active) { if (Math.hypot(dx, dy) > 12) { clearTimeout(ck.timer); ck = null; } return; }
-      ckSet(Math.max(0, Math.min(1, -dx / ck.shift)));
+      if (!ck || !ck.active) return;
+      const p = Math.max(0, Math.min(1, (ck.x0 - e.clientX) / travel()));
+      ckSet(p);
+      knob.style.transform = 'translateX(' + (-p * travel()) + 'px)';
+      label.style.opacity = String(1 - p);
+      t.setAttribute('aria-valuenow', String(Math.round(p * 100)));
     });
-    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => t.addEventListener(ev, ckEnd));
+    const end = () => {
+      if (!ck) return;
+      ckEnd();
+      t.classList.add('back'); knob.style.transform = ''; label.style.opacity = ''; t.setAttribute('aria-valuenow', '0');
+    };
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => t.addEventListener(ev, end));
     t.addEventListener('contextmenu', (e) => e.preventDefault());
-  });
+  }
 
   // ---------- 音（ピタッ／シャッター）：Web Audio で合成する ----------
   let actx = null;
