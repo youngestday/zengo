@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-17">
+<meta name="zengo-version" content="2026.11.13-18">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -185,7 +185,23 @@ body {
 @media (prefers-reduced-motion: reduce) { .flash.on { animation: none; } }
 
 .result { width: 100%; height: 100%; display: grid; place-items: center; gap: 6px; grid-template-rows: 1fr auto; min-height: 0; }
-.result img { max-width: 100%; max-height: 100%; object-fit: contain; min-height: 0; border-radius: 4px; -webkit-user-select: auto; -webkit-touch-callout: default; }
+.result img { max-width: 100%; max-height: 100%; object-fit: contain; min-height: 0; border-radius: 4px; -webkit-touch-callout: none; touch-action: none; }
+.result img.checking { opacity: 0; }
+.ck-bar {
+  display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 99px; border: 1px solid var(--line);
+  color: var(--muted); font-size: 12px; touch-action: none; -webkit-touch-callout: none;
+}
+.ck-bar b { color: var(--accent); font-size: 16px; }
+/* 重ねて確認：ビフォーが手前に浮き、左へドラッグするとビフォーは右へ、アフターは左へ寄って重なる */
+.checker { position: fixed; z-index: 30; pointer-events: none; }
+.checker canvas { position: absolute; top: 0; border-radius: 4px; will-change: transform, opacity; }
+.checker #ckBefore { z-index: 2; box-shadow: 0 10px 28px rgba(0,0,0,.55); transform-origin: center; }
+.checker.back canvas { transition: transform .22s ease-out, opacity .22s ease-out; }
+.ck-score {
+  position: absolute; left: 50%; top: -34px; transform: translateX(-50%); white-space: nowrap;
+  background: rgba(20,20,22,.92); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 13px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 .hint { color: var(--muted); font-size: 12px; text-align: center; }
 .msg {
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 10;
@@ -209,7 +225,7 @@ body {
 .tint-btn.wide { width: 104px; }
 .btn-pair { display: flex; gap: 4px; width: 104px; flex: none; }
 #modeBtn { gap: 1px; padding: 0 2px; font-size: 11px; font-weight: 500; color: var(--muted); width: 62px; }
-#tintBtn { width: 38px; padding: 0 2px; gap: 2px; font-size: 11px; }
+#tintBtn { width: 104px; padding: 0 6px; gap: 6px; font-size: 12px; }
 #modeBtn .cur { color: var(--accent); font-weight: 800; }
 .half-btn { width: 50px; height: 34px; min-height: 34px; padding: 0 4px; font-size: 12px; font-weight: 700; gap: 3px; white-space: nowrap; }
 .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); flex: none; }
@@ -310,8 +326,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   </div>
 
   <div class="result" id="result" hidden>
-    <img id="resultImg" alt="ビフォーアフター画像">
-    <div class="hint" id="resultHint">画像を長押しでも保存できます</div>
+    <img id="resultImg" alt="ビフォーアフター画像" draggable="false">
+    <div class="ck-bar" id="ckBar"><b>⇠</b> 長押しして左へドラッグすると、重ねて確認できます</div>
   </div>
 
   <div class="msg" id="msg" hidden></div>
@@ -337,12 +353,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       <div class="tool">
         <button class="overlay-btn on" id="overlayBtn" aria-pressed="true">重ねON</button>
         <div class="slider" id="opacityWrap">
-          <label for="opacity">重ねる濃さ <span id="opacityVal">40%</span></label>
+          <label for="opacity">線の濃さ <span id="opacityVal">40%</span></label>
           <input type="range" id="opacity" min="10" max="90" step="10" value="40">
         </div>
         <div class="btn-pair" id="overlayOpts">
-          <button class="half-btn mode-btn" id="modeBtn" aria-label="重ね方を切り替える（線／写真）"><span id="modeLine">線</span>⇔<span id="modePhoto">写真</span></button>
-          <button class="half-btn" id="tintBtn" aria-label="重ねる色を切り替える"><span class="swatch" id="tintSwatch"></span><span id="tintName">赤</span></button>
+          <button class="half-btn" id="tintBtn" aria-label="線の色を切り替える"><span class="swatch" id="tintSwatch"></span>線の色 <span id="tintName">赤</span></button>
         </div>
       </div>
       <div class="tool">
@@ -383,16 +398,25 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   </div>
 </nav>
 
+<!-- 重ねて確認（完成画面） -->
+<div class="checker" id="checker" hidden>
+  <canvas id="ckAfter"></canvas>
+  <canvas id="ckBefore"></canvas>
+  <div class="ck-score" id="ckScore"></div>
+</div>
+
 <!-- 設定 -->
 <div class="sheet-back" id="sheet" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <h2 id="sheetTitle">設定</h2>
     <label class="row"><span><b>ピタッの音</b><small>ビフォーと合ったときに「ピッピッ」と鳴らす</small></span><input type="checkbox" id="setPing"></label>
     <label class="row"><span><b>シャッター音</b><small>撮影したときに「カシャ」と鳴らす</small></span><input type="checkbox" id="setShutter"></label>
-    <div class="row"><span><b>自動撮影までの時間</b><small>合ってから撮影するまでの待ち時間（輪が減る時間）</small></span>
+    <div class="row"><span><b>ビフォーの自動撮影までの時間</b><small>水平・垂直がそろってから撮るまで。じっくり構えたいときは長めに</small></span>
+      <span class="sec"><input type="range" id="setCountB" min="0.5" max="5" step="0.5" value="2"><output id="setCountBVal">2.0秒</output></span></div>
+    <div class="row"><span><b>アフターの自動撮影までの時間</b><small>ビフォーと合ってから撮るまで（輪が減る時間）</small></span>
       <span class="sec"><input type="range" id="setCount" min="0.3" max="1.5" step="0.1" value="1"><output id="setCountVal">1.0秒</output></span></div>
     <label class="row"><span><b>グリッド</b><small>カメラの上に 3×3 の線を出す</small></span><input type="checkbox" id="setGrid"></label>
-    <label class="row"><span><b>水平・垂直ガイド</b><small>まん中の線が左右の傾きで回り（水平で黄色の1本に）、丸が前後の傾きで上下に動く（スマホがまっすぐ立つと黄色に）</small></span><input type="checkbox" id="setLevel"></label>
+    <label class="row"><span><b>水平・垂直ガイド</b><small>まん中の線が左右の傾きで回り（水平で黄色の1本に）、下のスマホ形の枠が前後の傾きで台形になる（まっすぐ立つと黄色に）</small></span><input type="checkbox" id="setLevel"></label>
     <label class="row"><span><b>傾きセンサー</b><small>ビフォーを撮ったときのスマホの傾きと比べて表示する</small></span><input type="checkbox" id="setTilt"></label>
     <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。<br>傾きは、このアプリのカメラでビフォーを撮ったときだけ比べられます（写真から選んだビフォーには傾きの記録がありません）。</p>
     <p class="note">版：<span id="verText"></span>　<button class="small" id="checkUpdate" type="button">新しい版を確認</button></p>
@@ -442,8 +466,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
   const settings = { ping: store.get('setPing', true), shutterSound: store.get('setShutter', true), tilt: store.get('setTilt', true),
     countSec: Math.round(snap(store.get('setCount', 1), 0.3, 1.5, 0.1, 1) * 10) / 10,
+    countBefore: Math.round(snap(store.get('setCountB', 2), 0.5, 5, 0.5, 2) * 10) / 10,
     grid: store.get('setGrid', true), level: store.get('setLevel', true) };
-  let lineMode = store.get('lineMode', true);   // true：線で重ねる／false：写真を薄く重ねる
+  const lineMode = true;   // 撮影中はビフォーの輪郭の線だけを重ねる（写真の重ね合わせは完成画面の確認で使う）
   let lineMask = null, lineURL = null, lineColorKey = null;
   let guide = null;
   let guideOn = false;   // 最初はガイドなしで合わせ、最後の微調整で使う想定。アフター画面に入るたびにOFFから始める
@@ -733,7 +758,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('tintName').textContent = tint.name;
     $('tintSwatch').style.background = tint.key === 'none' ? 'transparent' : tint.css.replace(/0\.4\)$/, '1)');
     $('overlayOpts').classList.toggle('invis', !isA || !overlayOn);
-    $('modeLine').className = lineMode ? 'cur' : ''; $('modePhoto').className = lineMode ? '' : 'cur';
     $('overlayImg').hidden = lineMode; $('overlayTint').hidden = lineMode;
     $('overlayLines').hidden = !lineMode;
     if (lineMode && isA && overlayOn) ensureLines();
@@ -787,6 +811,69 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     resultURL = URL.createObjectURL(resultBlob);
     $('resultImg').src = resultURL;
   }
+
+  // ---------- 完成画面：重ねて確認 ----------
+  // 長押し（0.3秒）でビフォーが手前に浮き、そのまま左へドラッグすると、ビフォーは右へ・アフターは左へ寄って重なる。
+  // 重なるほどビフォーが半透明になり、ずれが見える。指を離すと元に戻る。
+  let ck = null;
+  function ckGeom() {
+    const r = $('resultImg').getBoundingClientRect();
+    const H = Math.min(beforeCanvas.height, afterCanvas.height), W = Math.round(H * AR), gap = Math.round(W * 0.02);
+    const k = r.width / (W * 2 + gap);
+    return { r, w: W * k, h: H * k, gapPx: gap * k };
+  }
+  function ckDraw(cv, src, w, h) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    const g = cv.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, cv.width, cv.height);
+  }
+  function ckActivate() {
+    if (!ck || state !== 'result' || !beforeCanvas || !afterCanvas) return;
+    const G = ckGeom(), el = $('checker');
+    el.style.left = G.r.left + 'px'; el.style.top = G.r.top + 'px'; el.style.width = G.r.width + 'px'; el.style.height = G.r.height + 'px';
+    ckDraw($('ckBefore'), beforeCanvas, G.w, G.h); ckDraw($('ckAfter'), afterCanvas, G.w, G.h);
+    $('ckBefore').style.left = '0px'; $('ckAfter').style.left = (G.w + G.gapPx) + 'px';
+    ck.shift = (G.w + G.gapPx) / 2; ck.active = true;
+    // 撮った2枚がどれだけ合っているか
+    try { $('ckScore').textContent = '一致 ' + Math.round(matchPercent(beforeFeat, features(afterCanvas, afterCanvas.width, afterCanvas.height))) + '%'; } catch { $('ckScore').textContent = ''; }
+    el.classList.remove('back'); el.hidden = false; $('resultImg').classList.add('checking');
+    ckSet(0);
+    requestAnimationFrame(() => { $('ckBefore').style.transform = 'translateX(0) scale(1.04)'; });
+  }
+  function ckSet(p) {
+    ck.p = p;
+    $('ckBefore').style.transform = 'translateX(' + (p * ck.shift) + 'px) scale(' + (1.04 - 0.04 * p) + ')';
+    $('ckBefore').style.opacity = String(1 - 0.5 * p);
+    $('ckAfter').style.transform = 'translateX(' + (-p * ck.shift) + 'px)';
+  }
+  function ckEnd() {
+    if (!ck) return;
+    clearTimeout(ck.timer);
+    const was = ck.active; ck = null;
+    if (!was) return;
+    const el = $('checker'); el.classList.add('back');
+    $('ckBefore').style.transform = 'translateX(0) scale(1)'; $('ckBefore').style.opacity = '1'; $('ckAfter').style.transform = 'translateX(0)';
+    setTimeout(() => { el.hidden = true; el.classList.remove('back'); $('resultImg').classList.remove('checking'); }, 230);
+  }
+  ['resultImg', 'ckBar'].forEach(id => {
+    const t = $(id);
+    t.addEventListener('pointerdown', (e) => {
+      if (state !== 'result') return;
+      e.preventDefault();
+      try { t.setPointerCapture(e.pointerId); } catch {}
+      ck = { x0: e.clientX, y0: e.clientY, active: false, p: 0, shift: 1 };
+      ck.timer = setTimeout(ckActivate, 300);
+    });
+    t.addEventListener('pointermove', (e) => {
+      if (!ck) return;
+      const dx = e.clientX - ck.x0, dy = e.clientY - ck.y0;
+      if (!ck.active) { if (Math.hypot(dx, dy) > 12) { clearTimeout(ck.timer); ck = null; } return; }
+      ckSet(Math.max(0, Math.min(1, -dx / ck.shift)));
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => t.addEventListener(ev, ckEnd));
+    t.addEventListener('contextmenu', (e) => e.preventDefault());
+  });
 
   // ---------- 音（ピタッ／シャッター）：Web Audio で合成する ----------
   let actx = null;
@@ -1162,7 +1249,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, matchPercent, FW, FH };
 
   // しきい値を超えた状態がこの時間続いたら撮る（カウントダウンの長さ。設定で 0.3〜1.5秒）
-  const holdMs = () => settings.countSec * 1000;
+  const holdMs = () => (state === 'before' ? settings.countBefore : settings.countSec) * 1000;
   const GRACE_MS = 1500;   // アフター（ビフォー）画面に入った直後は撮らない
   let beforeEnteredAt = performance.now();
   // ビフォーの自動撮影：水平・垂直がそろっている間だけカウントダウンし、なくなったら撮る
@@ -1300,7 +1387,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   // 設定画面
   const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setGrid', 'grid'], ['setLevel', 'level'], ['setTilt', 'tilt']];
-  const showCount = () => { $('setCount').value = settings.countSec; $('setCountVal').textContent = settings.countSec.toFixed(1) + '秒'; };
+  const showCount = () => {
+    $('setCount').value = settings.countSec; $('setCountVal').textContent = settings.countSec.toFixed(1) + '秒';
+    $('setCountB').value = settings.countBefore; $('setCountBVal').textContent = settings.countBefore.toFixed(1) + '秒';
+  };
+  $('setCountB').oninput = (e) => { settings.countBefore = Math.round(snap(e.target.value, 0.5, 5, 0.5, 2) * 10) / 10; store.set('setCountB', settings.countBefore); showCount(); };
   $('setCount').oninput = (e) => { settings.countSec = Math.round(snap(e.target.value, 0.3, 1.5, 0.1, 1) * 10) / 10; store.set('setCount', settings.countSec); showCount(); };
   $('gearBtn').onclick = () => { SET.forEach(([id, k]) => $(id).checked = settings[k]); showCount(); $('sheet').hidden = false; $('sheetClose').focus(); };
   SET.forEach(([id, k]) => $(id).onchange = (e) => {
@@ -1318,7 +1409,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   if (location.hash === '#test') window.__tilt = { onOrient, get now() { return tiltNow; }, set before(v) { tiltBefore = v; }, renderTilt };
 
   $('guideBtn').onclick = () => { guideOn = !guideOn; guide = null; render(); };
-  $('modeBtn').onclick = () => { lineMode = !lineMode; store.set('lineMode', lineMode); render(); };
   $('tintBtn').onclick = () => { tintIdx = (tintIdx + 1) % TINTS.length; store.set('tint', TINTS[tintIdx].key); render(); };
   $('autoBtn').onclick = () => { autoOn = !autoOn; holdSince = 0; store.set('autoOn', autoOn); render(); };
   $('threshold').oninput = (e) => { threshold = +e.target.value; holdSince = 0; store.set('threshold', threshold); render(); };
@@ -1367,7 +1457,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     }
     const a = document.createElement('a'); a.href = resultURL; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
-    msg('保存できない場合は、画像を長押しして「"写真"に保存」を選んでください', 6000);
+    // 共有が使えないときは、画像だけを別の画面で開く（そこで長押しして保存できる）
+    window.open(resultURL, '_blank');
+    msg('開いた画像を長押しして「"写真"に保存」を選んでください', 6000);
   };
 
   function cameraAlive() {
