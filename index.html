@@ -858,6 +858,41 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     return Math.max(0, Math.min(1, 0.5 * zn + 0.5 * gr)) * 100;
   }
   const M = [MX, MY];
+
+  // ---------- 一致度（画面に出す％）----------
+  // 片付けの前後では物が減ったり動いたりするので、画面全体をそのまま比べると、構図が合っていても低く出る。
+  // そこで画面を 4×6 のマスに分けてマスごとに比べ、よく合っている上位4割のマスの平均を使う。
+  // 変わった場所（片付けた所）は無視され、構図がずれていればどのマスも下がる。
+  const TC = 4, TR = 6, TOP = 0.4;
+  function tileSim(a, b, x0, x1, y0, y1) {
+    let ma = 0, mb = 0, n = 0;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { ma += a.g[y * FW + x]; mb += b.g[y * FW + x]; n++; }
+    ma /= n; mb /= n;
+    let sab = 0, saa = 0, sbb = 0, gab = 0, gaa = 0, gbb = 0;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const i = y * FW + x, da = a.g[i] - ma, db = b.g[i] - mb;
+      sab += da * db; saa += da * da; sbb += db * db;
+      gab += a.gx[i] * b.gx[i] + a.gy[i] * b.gy[i];
+      gaa += a.gx[i] * a.gx[i] + a.gy[i] * a.gy[i];
+      gbb += b.gx[i] * b.gx[i] + b.gy[i] * b.gy[i];
+    }
+    const zn = saa && sbb ? sab / Math.sqrt(saa * sbb) : 0;
+    const gr = gaa && gbb ? gab / Math.sqrt(gaa * gbb) : 0;
+    return { v: 0.5 * zn + 0.5 * gr, e: gaa / n };
+  }
+  function matchPercent(a, b) {
+    const x0 = 2, x1 = FW - 2, y0 = 2, y1 = FH - 2, tw = (x1 - x0) / TC, th = (y1 - y0) / TR, tiles = [];
+    for (let r = 0; r < TR; r++) for (let c = 0; c < TC; c++)
+      tiles.push(tileSim(a, b, Math.round(x0 + c * tw), Math.round(x0 + (c + 1) * tw), Math.round(y0 + r * th), Math.round(y0 + (r + 1) * th)));
+    // ビフォーでほとんど模様のないマス（無地の壁など）は判断材料にならないので外す
+    const med = tiles.map(t => t.e).sort((p, q) => p - q)[tiles.length >> 1];
+    const vals = tiles.filter(t => t.e > med * 0.15).map(t => t.v).sort((p, q) => q - p);
+    const k = Math.max(1, Math.round(vals.length * TOP));
+    let sum = 0; for (let i = 0; i < k; i++) sum += vals[i];
+    const raw = sum / k;
+    // 構図が合っていればおおむね 0.8 以上、大きくずれると 0.15 前後 → 0〜100% に広げる
+    return Math.max(0, Math.min(100, (raw - 0.15) / (0.80 - 0.15) * 100));
+  }
   function bestShift(a, b, cx, cy, r, step) {
     let best = { dx: cx, dy: cy, s: -1 };
     for (let dy = cy - r; dy <= cy + r; dy += step) for (let dx = cx - r; dx <= cx + r; dx += step) {
@@ -885,7 +920,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     return { ...best, base };
   }
 
-  if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, FW, FH };
+  if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, matchPercent, FW, FH };
 
   const HOLD_MS = 600;     // しきい値を超えた状態がこの時間続いたら撮る（手ぶれ防止）
   const GRACE_MS = 1500;   // アフター画面に入った直後は撮らない
@@ -937,7 +972,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (state !== 'after' || !beforeFeat || !stream || !video.videoWidth || shooting || document.hidden) return;
     drawA(video, video.videoWidth, video.videoHeight);
     const live = featFromA();
-    const sc = similarity(beforeFeat, live);
+    const sc = matchPercent(beforeFeat, live);
     matchScore = matchScore === null ? sc : matchScore * 0.6 + sc * 0.4;
     // ガイドは 2回に1回（約0.3秒ごと）。直前の結果となめらかにつなぐ
     if (guideOn && tick++ % 2 === 0) {
