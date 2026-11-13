@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-24">
+<meta name="zengo-version" content="2026.11.13-25">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -233,6 +233,8 @@ body {
 .tint-btn { width: 76px; height: 34px; min-height: 34px; padding: 0 6px; flex: none; font-size: 12px; font-weight: 700; gap: 5px; }
 .tint-btn.on { background: var(--accent); color: #111; border-color: var(--accent); }
 .tint-btn.wide { width: 104px; }
+.tint-main { gap: 6px; }
+.tint-main.on { background: var(--panel); color: var(--fg); border-color: var(--line); }
 .btn-pair { display: flex; gap: 4px; width: 104px; flex: none; }
 #modeBtn { gap: 1px; padding: 0 2px; font-size: 11px; font-weight: 500; color: var(--muted); width: 62px; }
 #tintBtn { width: 104px; padding: 0 6px; gap: 6px; font-size: 12px; }
@@ -324,7 +326,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       <div class="overlay" id="overlay" hidden><img id="overlayImg" alt=""><span class="tint" id="overlayTint"></span><img id="overlayLines" alt="" hidden></div>
       <div class="badges">
         <div class="match" id="match" hidden>一致 --%</div>
-        <div class="match" id="tilt" hidden></div>
       </div>
       <div class="pita" id="pita" hidden>ピタッ！</div>
 
@@ -366,14 +367,12 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   <div class="cap" id="cap">
     <div class="tools" id="tools">
       <div class="tool">
-        <button class="overlay-btn on" id="overlayBtn" aria-pressed="true">重ねON</button>
+        <button class="overlay-btn tint-main" id="tintBtn" aria-label="ビフォーの線の色を切り替える（なしで線を消す）"><span class="swatch" id="tintSwatch"></span><span id="tintName">線 赤</span></button>
         <div class="slider" id="opacityWrap">
           <label for="opacity">線の濃さ <span id="opacityVal">40%</span></label>
           <input type="range" id="opacity" min="10" max="90" step="10" value="40">
         </div>
-        <div class="btn-pair" id="overlayOpts">
-          <button class="half-btn" id="tintBtn" aria-label="線の色を切り替える"><span class="swatch" id="tintSwatch"></span>線の色 <span id="tintName">赤</span></button>
-        </div>
+        <span class="tint-btn wide invis" aria-hidden="true"></span>
       </div>
       <div class="tool">
         <button class="overlay-btn" id="autoBtn" aria-pressed="false">自動撮影OFF</button>
@@ -432,8 +431,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       <span class="sec"><input type="range" id="setCount" min="0.3" max="1.5" step="0.1" value="1"><output id="setCountVal">1.0秒</output></span></div>
     <label class="row"><span><b>グリッド</b><small>カメラの上に 3×3 の線を出す</small></span><input type="checkbox" id="setGrid"></label>
     <label class="row"><span><b>水平・垂直ガイド</b><small>まん中の線が左右の傾きで回り（水平で黄色の1本に）、下のスマホ形の枠が前後の傾きで台形になる（まっすぐ立つと黄色に）</small></span><input type="checkbox" id="setLevel"></label>
-    <label class="row"><span><b>傾きセンサー</b><small>ビフォーを撮ったときのスマホの傾きと比べて表示する</small></span><input type="checkbox" id="setTilt"></label>
-    <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。<br>傾きは、このアプリのカメラでビフォーを撮ったときだけ比べられます（写真から選んだビフォーには傾きの記録がありません）。</p>
+    <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。</p>
     <p class="note">版：<span id="verText"></span>　<button class="small" id="checkUpdate" type="button">新しい版を確認</button></p>
     <button class="primary" id="sheetClose">閉じる</button>
   </div>
@@ -466,7 +464,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   let beforeCanvas = null, afterCanvas = null;
   let beforeFull = null, afterFull = null;   // 切り抜く前の写真（比率を後から変えられるように残す）
   let beforeURL = null, resultBlob = null, resultURL = null;
-  let overlayOn = store.get('overlayOn', true);
+  let overlayOn = true;   // 線の色が「なし」でなければ重ねる（render で決める）
   // 前の版で保存した値も、今の目盛り（範囲と刻み）に合わせる
   const snap = (v, min, max, step, d) => { v = Number(v); if (!isFinite(v)) v = d; return Math.min(max, Math.max(min, Math.round((v - min) / step) * step + min)); };
   let opacity = snap(store.get('opacity', 40), 10, 90, 10, 40);
@@ -476,7 +474,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     { key: 'red',   name: '赤', css: 'rgba(255, 30, 30, 0.4)',  line: [255, 50, 50] },
     { key: 'blue',  name: '青', css: 'rgba(30, 110, 255, 0.4)', line: [60, 150, 255] },
     { key: 'green', name: '緑', css: 'rgba(30, 220, 70, 0.4)',  line: [40, 235, 90] },
-    { key: 'none',  name: 'なし', css: 'transparent',            line: [255, 255, 255] },
+    { key: 'none',  name: 'なし', css: 'transparent',            line: [255, 50, 50] },
   ];
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
   const settings = { ping: store.get('setPing', true), shutterSound: store.get('setShutter', true), tilt: store.get('setTilt', true),
@@ -748,13 +746,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('phR').hidden = !isB;
     $('tagL').classList.toggle('live', isB);
     $('tagR').classList.toggle('live', isA);
+    overlayOn = TINTS[tintIdx].key !== 'none';
     $('overlay').hidden = !(isA && overlayOn && beforeURL);
     $('overlay').style.opacity = opacity / 100;
     $('opacityVal').textContent = opacity + '%';
     // ボタンには今の状態を書く（オン中は黄色）
-    $('overlayBtn').textContent = overlayOn ? '重ねON' : '重ねOFF';
-    $('overlayBtn').classList.toggle('on', overlayOn);
-    $('overlayBtn').setAttribute('aria-pressed', String(overlayOn));
 
     // 見えなくする部品も場所は残す（invis）ので、シャッターやボタンの位置が動かない
     $('cap').hidden = isR; $('res').hidden = !isR;
@@ -768,9 +764,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('thresholdWord').textContent = autoOn ? 'で撮る' : 'でピタッ';
     const tint = TINTS[tintIdx];
     $('overlay').style.setProperty('--tint', tint.css);
-    $('tintName').textContent = tint.name;
+    $('tintName').textContent = tint.key === 'none' ? '線なし' : '線 ' + tint.name;
+    $('tintBtn').classList.toggle('on', tint.key !== 'none');
     $('tintSwatch').style.background = tint.key === 'none' ? 'transparent' : tint.css.replace(/0\.4\)$/, '1)');
-    $('overlayOpts').classList.toggle('invis', !isA || !overlayOn);
     $('overlayImg').hidden = lineMode; $('overlayTint').hidden = lineMode;
     $('overlayLines').hidden = !lineMode;
     if (lineMode && isA && overlayOn) ensureLines();
@@ -792,7 +788,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     state = next; clearCamError();
     if (next === 'before') { beforeEnteredAt = performance.now(); holdSince = 0; }
     if (next === 'after') { afterEnteredAt = performance.now(); matchScore = null; holdSince = 0; guide = null; guideOn = false; aligned = false; }
-    if (next !== 'after') { $('pita').hidden = true; $('paneR').classList.remove('aligned'); $('tilt').hidden = true; }
+    if (next !== 'after') { $('pita').hidden = true; $('paneR').classList.remove('aligned'); }
     render();
     // 完成画面でもカメラは止めない（撮り直しのたびにカメラを起動し直さないため）
     if (next !== 'result' && !cameraAlive()) await startCamera();
@@ -1050,7 +1046,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   // iPhoneはタップの中で許可を求める必要がある（水平線のため、最初に画面に触れたときにも求める）
   document.addEventListener('click', () => askTilt(), { capture: true });
   function askTilt() {
-    if (!(settings.tilt || settings.level) || tiltListening) return;
+    if (!settings.level || tiltListening) return;
     if (tiltNow) { tiltListening = true; return; }   // すでに動いている
     const start = () => { window.addEventListener('deviceorientation', onOrient); tiltListening = true; };
     const D = window.DeviceOrientationEvent;
@@ -1060,25 +1056,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     } else if (D) start();
   }
   // 起動時：前に許可していれば、タップを待たずにセンサーが動く（動かなければ最初のタップで許可を求める）
-  if ((settings.tilt || settings.level) && window.DeviceOrientationEvent) {
+  if (settings.level && window.DeviceOrientationEvent) {
     window.addEventListener('deviceorientation', onOrient);
     const D = window.DeviceOrientationEvent;
     if (typeof D.requestPermission === 'function') D.requestPermission().then(r => { if (r === 'granted') tiltListening = true; }).catch(() => {});
     else tiltListening = true;
-  }
-  function renderTilt() {
-    const el = $('tilt');
-    if (state !== 'after' || !settings.tilt || !tiltBefore || !tiltNow) { el.hidden = true; return null; }
-    const dp = tiltNow.pitch - tiltBefore.pitch;
-    const dr = tiltNow.roll != null && tiltBefore.roll != null ? ((tiltNow.roll - tiltBefore.roll + 540) % 360) - 180 : 0;
-    const parts = [];
-    if (Math.abs(dp) >= 1.5) parts.push((dp > 0 ? '↓ 傾き ' : '↑ 傾き ') + Math.round(Math.abs(dp)) + '° ' + (dp > 0 ? '下へ' : '上へ'));
-    if (Math.abs(dr) >= 1.5) parts.push((dr > 0 ? '↻ ' : '↺ ') + Math.round(Math.abs(dr)) + '° ' + (dr > 0 ? '右に回す' : '左に回す'));
-    const ok = !parts.length;
-    el.textContent = ok ? '✓ 傾き OK' : parts.join('　');
-    el.classList.toggle('ok', ok);
-    el.hidden = false;
-    return ok;
   }
 
   // ---------- 線モード：ビフォーの輪郭（テーブルや冷蔵庫の縁など）だけを取り出す ----------
@@ -1339,7 +1321,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       el.textContent = '一致 ' + Math.round(matchScore) + '% / ' + threshold + '%';
       el.classList.toggle('ok', matchScore >= threshold);
     }
-    renderTilt();
     const now = state === 'after' && matchScore !== null && (aligned ? matchScore >= threshold - 5 : matchScore >= threshold);
     if (now && !aligned) {
       playPing();
@@ -1394,8 +1375,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     renderMatch();
     const now = performance.now();
     if (!autoOn || now - afterEnteredAt < GRACE_MS || matchScore < threshold) { holdSince = 0; return; }
-    // 傾きセンサーが使えるときは、傾きも合っているときだけ自動で撮る
-    if (renderTilt() === false) { holdSince = 0; return; }
     if (!holdSince) { holdSince = now; requestAnimationFrame(countLoop); }
   }, 150);
 
@@ -1457,7 +1436,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(false); });
 
   // 設定画面
-  const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setGrid', 'grid'], ['setLevel', 'level'], ['setTilt', 'tilt']];
+  const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setGrid', 'grid'], ['setLevel', 'level']];
   const showCount = () => {
     $('setCount').value = settings.countSec; $('setCountVal').textContent = settings.countSec.toFixed(1) + '秒';
     $('setCountB').value = settings.countBefore; $('setCountBVal').textContent = settings.countBefore.toFixed(1) + '秒';
@@ -1467,7 +1446,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('gearBtn').onclick = () => { SET.forEach(([id, k]) => $(id).checked = settings[k]); showCount(); $('sheet').hidden = false; $('sheetClose').focus(); };
   SET.forEach(([id, k]) => $(id).onchange = (e) => {
     settings[k] = e.target.checked; store.set(id, settings[k]);
-    if ((k === 'tilt' && settings.tilt) || (k === 'level' && settings.level)) askTilt();
+    if (k === 'level' && settings.level) askTilt();
     if (k === 'level') updateLevel();
     if (k === 'ping' && settings.ping) playPing();
     if (k === 'shutterSound' && settings.shutterSound) playShutter();
@@ -1477,7 +1456,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) $('sheet').hidden = true; });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('sheet').hidden = true; });
   if (location.hash === '#test') window.__guide = { set(v) { guide = v; guideOn = true; render(); renderGuide(); } };
-  if (location.hash === '#test') window.__tilt = { onOrient, get now() { return tiltNow; }, set before(v) { tiltBefore = v; }, renderTilt };
+  if (location.hash === '#test') window.__tilt = { onOrient, get now() { return tiltNow; }, set before(v) { tiltBefore = v; } };
 
   $('guideBtn').onclick = () => { guideOn = !guideOn; guide = null; render(); };
   $('tintBtn').onclick = () => { tintIdx = (tintIdx + 1) % TINTS.length; store.set('tint', TINTS[tintIdx].key); render(); };
@@ -1495,7 +1474,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   };
 
   $('opacity').oninput = (e) => { opacity = +e.target.value; store.set('opacity', opacity); render(); };
-  $('overlayBtn').onclick = () => { overlayOn = !overlayOn; store.set('overlayOn', overlayOn); render(); };
   $('redoBefore').onclick = () => go('before');
   $('retakeAfter').onclick = () => go('after');
   $('newBtn').onclick = () => { beforeCanvas = afterCanvas = beforeFull = afterFull = null; go('before'); };
