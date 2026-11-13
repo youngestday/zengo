@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-23">
+<meta name="zengo-version" content="2026.11.13-24">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -185,7 +185,7 @@ body {
 @media (prefers-reduced-motion: reduce) { .flash.on { animation: none; } }
 
 .result { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; }
-.result img { max-width: 100%; max-height: calc(100% - 70px); object-fit: contain; min-height: 0; border-radius: 4px; -webkit-touch-callout: none; touch-action: none; }
+.result img { max-width: 100%; max-height: calc(100% - 112px); object-fit: contain; min-height: 0; border-radius: 4px; -webkit-touch-callout: none; touch-action: none; }
 .result img.checking { opacity: 0; }
 /* 重なりチェックのスライダー（iPhoneの「スライドで電源オフ」のように、右のつまみを左へ滑らせる） */
 .ck-slide {
@@ -201,6 +201,11 @@ body {
   position: absolute; right: 4px; top: 4px; width: 48px; height: 48px; border-radius: 50%;
   display: grid; place-items: center; background: var(--accent); color: #111; box-shadow: 0 2px 8px rgba(0,0,0,.4); cursor: grab;
 }
+.ck-mode { display: flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; flex: none; }
+.ck-mode button { min-height: 32px; padding: 4px 16px; border: 0; border-radius: 0; font-size: 12px; font-weight: 700; color: var(--muted); background: var(--panel); }
+.ck-mode button.on { background: var(--accent); color: #111; }
+.checker #ckBeforeLines { z-index: 4; }
+.checker.lines #ckBefore { z-index: 3; }
 .ck-slide.back .ck-knob, .ck-slide.back .ck-label { transition: transform .22s ease-out, opacity .22s ease-out; }
 /* 重なりチェック：アフターが手前に浮き、左へドラッグするとビフォーは右へ、アフターは左へ寄って重なる */
 .checker { position: fixed; z-index: 30; pointer-events: none; }
@@ -239,11 +244,10 @@ body {
 .front-btn { width: 38px; height: 38px; min-height: 38px; padding: 0; border-radius: 50%; align-self: center; }
 .front-btn.on { background: var(--accent); color: #111; border-color: var(--accent); }
 /* レンズ：0.5x を上、1x・2x を下に並べた三角形。0.5x のないとき（インカメなど）も場所は空けておく */
-.lens { display: grid; grid-template-columns: 40px 40px; grid-template-areas: "uw uw" "w1 w2"; gap: 4px; justify-content: center; }
-.lens .uw { grid-area: uw; justify-self: center; }
+.lens { display: grid; grid-template-columns: 44px 44px; grid-template-areas: "uw w1"; gap: 6px; justify-content: center; }
+.lens .uw { grid-area: uw; }
 .lens .w1 { grid-area: w1; }
-.lens .w2 { grid-area: w2; }
-.lens button { width: 40px; min-width: 0; height: 34px; min-height: 34px; padding: 0; border-radius: 99px; font-size: 12px; font-weight: 700; }
+.lens button { width: 44px; min-width: 0; height: 34px; min-height: 34px; padding: 0; border-radius: 99px; font-size: 12px; font-weight: 700; }
 .ratio-btn { width: 76px; height: 34px; min-height: 34px; padding: 0; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .zone-b { grid-area: b; display: grid; gap: 6px; justify-items: center; }
 .shutter-cell { grid-area: shutter; }
@@ -336,6 +340,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       <span class="ck-label" id="ckLabel">重なりチェック</span>
       <span class="ck-knob" id="ckKnob"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg></span>
     </div>
+    <div class="ck-mode" role="group" aria-label="重なりチェックの重ね方">
+      <button type="button" id="ckModeLine">線画</button><button type="button" id="ckModePhoto">写真</button>
+    </div>
   </div>
 
   <div class="msg" id="msg" hidden></div>
@@ -410,6 +417,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 <div class="checker" id="checker" hidden>
   <canvas id="ckAfter"></canvas>
   <canvas id="ckBefore"></canvas>
+  <canvas id="ckBeforeLines"></canvas>
 </div>
 
 <!-- 設定 -->
@@ -453,7 +461,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   let state = 'before';        // before | after | result
   let stream = null;
   let cams = [];               // {id, key, name}
-  let lensKey = store.get('lens', 'uw');
+  let lensKey = store.get('lens', 'uw') === 'x2' ? 'wide' : store.get('lens', 'uw');   // 2x はなくした
   let starting = null;
   let beforeCanvas = null, afterCanvas = null;
   let beforeFull = null, afterFull = null;   // 切り抜く前の写真（比率を後から変えられるように残す）
@@ -520,7 +528,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const order = { uw: 0, wide: 1 };
     out.sort((a, b) => (order[a.key] ?? 9) - (order[b.key] ?? 9));
     const base = out.find(c => c.key === 'wide') || out.find(c => c.key !== 'uw') || out[0];
-    if (base) out.splice(out.indexOf(base) + 1, 0, { id: base.id, key: 'x2', name: '2x', zoom: 2 });
     return out;
   }
 
@@ -543,12 +550,12 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   function lensOptions() {
     if (facing === 'user') {
       if (!frontCam) return [];
-      return [{ id: frontCam.id, key: 'f1', name: '1x', zoom: 1, front: true }, { id: frontCam.id, key: 'f2', name: '2x', zoom: 2, front: true }];
+      return [{ id: frontCam.id, key: 'f1', name: '1x', zoom: 1, front: true }];
     }
     return cams;
   }
   function curLens() { return lensOptions().find(c => c.key === (facing === 'user' ? frontKey : lensKey)); }
-  let frontKey = store.get('frontLens', 'f1');
+  let frontKey = 'f1';
   function applyView() {
     const L = curLens();
     dzoom = L ? L.zoom : 1;
@@ -617,18 +624,17 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('frontBtn').setAttribute('aria-pressed', String(facing === 'user'));
     const opts = lensOptions();
     const curKey = facing === 'user' ? frontKey : lensKey;
-    // 決まった3つの場所（上：0.5x／左下：1x／右下：2x）に置く。ないものは見えない空きにして、ボタンが動かないようにする
+    // 決まった2つの場所（左：0.5x／右：1x）に置く。ないもの（インカメの 0.5x など）は見えない空きにして、ボタンが動かないようにする
     const slots = {
       uw: opts.find(c => c.key === 'uw'),
       w1: opts.find(c => c.zoom === 1 && c.key !== 'uw'),
-      w2: opts.find(c => c.zoom === 2),
     };
-    ['uw', 'w1', 'w2'].forEach(slot => {
+    ['uw', 'w1'].forEach(slot => {
       const c = slots[slot];
       const b = document.createElement('button');
       if (!c || state === 'result') {
         b.className = slot + ' invis'; b.tabIndex = -1; b.setAttribute('aria-hidden', 'true');
-        b.textContent = slot === 'uw' ? '0.5x' : slot === 'w1' ? '1x' : '2x';
+        b.textContent = slot === 'uw' ? '0.5x' : '1x';
         box.appendChild(b); return;
       }
       b.textContent = slot === 'w1' ? '1x' : c.name; b.className = slot + (c.key === curKey ? ' on' : '');
@@ -836,11 +842,32 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     cv.style.width = w + 'px'; cv.style.height = h + 'px';
     const g = cv.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, cv.width, cv.height);
   }
+  // 重ね方：線画（ビフォーを線にしてアフターの上に重ねる）／写真（アフターを半透明にして重ねる）
+  let ckMode = store.get('ckMode', 'line');
+  function renderCkMode() {
+    $('ckModeLine').classList.toggle('on', ckMode === 'line'); $('ckModeLine').setAttribute('aria-pressed', String(ckMode === 'line'));
+    $('ckModePhoto').classList.toggle('on', ckMode === 'photo'); $('ckModePhoto').setAttribute('aria-pressed', String(ckMode === 'photo'));
+  }
+  $('ckModeLine').onclick = () => { ckMode = 'line'; store.set('ckMode', ckMode); renderCkMode(); };
+  $('ckModePhoto').onclick = () => { ckMode = 'photo'; store.set('ckMode', ckMode); renderCkMode(); };
+  renderCkMode();
+  // ビフォー（比率で切り出したもの）の線画。ビフォー・比率・線の色が変わったら作り直す
+  let ckLinesCache = { src: null, tint: null, canvas: null };
+  function ckLinesCanvas() {
+    const tk = TINTS[tintIdx].key;
+    if (ckLinesCache.src === beforeCanvas && ckLinesCache.tint === tk) return ckLinesCache.canvas;
+    const c = linesToCanvas(buildLineMask(beforeCanvas), TINTS[tintIdx]);
+    ckLinesCache = { src: beforeCanvas, tint: tk, canvas: c };
+    return c;
+  }
   function ckActivate() {
     if (!ck || state !== 'result' || !beforeCanvas || !afterCanvas) return;
     const G = ckGeom(), el = $('checker');
     el.style.left = G.r.left + 'px'; el.style.top = G.r.top + 'px'; el.style.width = G.r.width + 'px'; el.style.height = G.r.height + 'px';
     ckDraw($('ckBefore'), beforeCanvas, G.w, G.h); ckDraw($('ckAfter'), afterCanvas, G.w, G.h);
+    el.classList.toggle('lines', ckMode === 'line');
+    $('ckBeforeLines').hidden = ckMode !== 'line';
+    if (ckMode === 'line') { ckDraw($('ckBeforeLines'), ckLinesCanvas(), G.w, G.h); $('ckBeforeLines').style.left = '0px'; }
     $('ckBefore').style.left = '0px'; $('ckAfter').style.left = (G.w + G.gapPx) + 'px';
     ck.shift = (G.w + G.gapPx) / 2; ck.active = true;
     el.classList.remove('back'); el.hidden = false; $('resultImg').classList.add('checking');
@@ -849,10 +876,19 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   }
   function ckSet(p) {
     ck.p = p;
-    // アフターが手前に浮いて、重なるほど半透明になる
     $('ckAfter').style.transform = 'translateX(' + (-p * ck.shift) + 'px) scale(' + (1.04 - 0.04 * p) + ')';
-    $('ckAfter').style.opacity = String(1 - 0.5 * p);
     $('ckBefore').style.transform = 'translateX(' + (p * ck.shift) + 'px)';
+    if (ckMode === 'line') {
+      // 線画：ビフォーは寄りながら写真から線画に変わり、くっきりしたアフターの上に線が重なる
+      $('ckAfter').style.opacity = '1';
+      $('ckBefore').style.opacity = String(1 - p);
+      $('ckBeforeLines').style.transform = $('ckBefore').style.transform;
+      $('ckBeforeLines').style.opacity = String(p);
+    } else {
+      // 写真：アフターが手前に浮いて、重なるほど半透明になる
+      $('ckAfter').style.opacity = String(1 - 0.5 * p);
+      $('ckBefore').style.opacity = '1';
+    }
   }
   function ckEnd() {
     if (!ck) return;
@@ -860,7 +896,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const was = ck.active; ck = null;
     if (!was) return;
     const el = $('checker'); el.classList.add('back');
-    $('ckAfter').style.transform = 'translateX(0) scale(1)'; $('ckAfter').style.opacity = '1'; $('ckBefore').style.transform = 'translateX(0)';
+    $('ckAfter').style.transform = 'translateX(0) scale(1)'; $('ckAfter').style.opacity = '1';
+    $('ckBefore').style.transform = 'translateX(0)'; $('ckBefore').style.opacity = '1';
+    $('ckBeforeLines').style.transform = 'translateX(0)'; $('ckBeforeLines').style.opacity = '0';
     setTimeout(() => { el.hidden = true; el.classList.remove('back'); $('resultImg').classList.remove('checking'); }, 230);
   }
   // スライダーの長さ：完成画像の下に中央そろえで置く。つまみが動く距離は、
@@ -1116,9 +1154,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     return out;
   }
   // 線を描く：選んだ色の線＋まわりに薄い黒の縁（明るい場所でも見えるように）
-  async function renderLines() {
-    if (!lineMask) return;
-    const { w, h, mask } = lineMask, tint = TINTS[tintIdx], [R, G, B] = tint.line;
+  function linesToCanvas(LM, tint) {
+    const { w, h, mask } = LM, [R, G, B] = tint.line;
     const inner = dilate(mask, w, h, 1), outer = dilate(inner, w, h, 1);
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const g = c.getContext('2d'), img = g.createImageData(w, h), px = img.data;
@@ -1127,6 +1164,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       else if (outer[i]) { px[i * 4 + 3] = 140; }
     }
     g.putImageData(img, 0, 0);
+    return c;
+  }
+  async function renderLines() {
+    if (!lineMask) return;
+    const tint = TINTS[tintIdx], c = linesToCanvas(lineMask, tint);
     const blob = await new Promise(res => c.toBlob(res, 'image/png'));
     if (lineURL) URL.revokeObjectURL(lineURL);
     lineURL = URL.createObjectURL(blob);
