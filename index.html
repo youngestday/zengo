@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-30">
+<meta name="zengo-version" content="2026.11.13-31">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -1440,7 +1440,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       el.textContent = '一致 ' + Math.round(matchScore) + '% / ' + threshold + '%';
       el.classList.toggle('ok', matchScore >= threshold);
     }
-    const now = state === 'after' && matchScore !== null && (aligned ? matchScore >= threshold - 5 : matchScore >= threshold);
+    // ピタッと自動撮影は同じ条件（ピタッが出たら撮る）：一致度（一度合ったら5%下がるまで合ったまま）・
+    // 画面に入って1.5秒たった・ビフォーをまっすぐ撮っていたら大きく傾いていない
+    const now = state === 'after' && matchScore !== null && (aligned ? matchScore >= threshold - 5 : matchScore >= threshold)
+      && performance.now() - afterEnteredAt >= GRACE_MS && tiltOkForAfter();
     if (now && !aligned) {
       playPing();
       const p = $('pita'); p.hidden = false; p.classList.remove('pop'); void p.offsetWidth; p.classList.add('pop');
@@ -1475,6 +1478,12 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (!tiltNow) return true;   // センサーが使えないときは傾きを条件にしない
     return Math.abs(tiltNow.pitch) <= TILT_PITCH && (tiltNow.roll == null || Math.abs(tiltNow.roll) <= TILT_ROLL);
   }
+  // 位置・画角合わせが主役。ビフォーをまっすぐ（水平・垂直）で撮っていても、アフターは
+  // 大きく傾いていなければよい（左右 TILT_ROLL 度・前後 TILT_PITCH 度まで。気に入らなければ撮り直せばよい）
+  function tiltOkForAfter() {
+    const beforeUpright = tiltBefore && Math.abs(tiltBefore.pitch) < 2 && tiltBefore.roll != null && Math.abs(tiltBefore.roll) < 1.5;
+    return !(beforeUpright && settings.level) || roughlyLevel();
+  }
   function combineLive(L) {
     const v = [];
     if (L.line != null) v.push(L.line);
@@ -1489,6 +1498,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (lineTick++ % 2 === 0) { drawL(video, video.videoWidth, video.videoHeight, dzoom, mirror); lastLive = liveCheck(); }
     // 動かない線（向き）と四隅（立ち位置）の平均を出し、マスごとの一致度（大きなずれ）と低いほうを使う
     if (lastLive) sc = Math.min(sc, combineLive(lastLive));
+    if (window.__forceScore != null) sc = window.__forceScore;   // テスト用
     matchScore = matchScore === null ? sc : matchScore * 0.6 + sc * 0.4;
     // ガイドは 2回に1回（約0.3秒ごと）。直前の結果となめらかにつなぐ
     if (guideOn && tick++ % 2 === 0) {
@@ -1502,13 +1512,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       };
     }
     renderMatch();
-    const now = performance.now();
-    if (!autoOn || now - afterEnteredAt < GRACE_MS || matchScore < threshold) { holdSince = 0; return; }
-    // 位置・画角合わせが主役。ビフォーをまっすぐ（水平・垂直）で撮っていても、アフターは
-    // 大きく傾いていなければ撮る（左右 TILT_ROLL 度・前後 TILT_PITCH 度まで。気に入らなければ撮り直せばよい）
-    const beforeUpright = tiltBefore && Math.abs(tiltBefore.pitch) < 2 && tiltBefore.roll != null && Math.abs(tiltBefore.roll) < 1.5;
-    if (beforeUpright && settings.level && !roughlyLevel()) { holdSince = 0; return; }
-    if (!holdSince) { holdSince = now; requestAnimationFrame(countLoop); }
+    // ピタッが出ている間カウントダウンし、0.3秒たったら撮る
+    if (!autoOn || !aligned) { holdSince = 0; return; }
+    if (!holdSince) { holdSince = performance.now(); requestAnimationFrame(countLoop); }
   }, 150);
 
   // カウントダウンの輪を毎フレーム描き、時間になったら撮る。合わなくなったら（holdSince=0）消す
