@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-9">
+<meta name="zengo-version" content="2026.11.13-10">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -124,6 +124,25 @@ body {
   background: rgba(20,20,22,.95); border: 1px solid var(--accent); border-radius: 12px; padding: 6px 6px 6px 12px; font-size: 13px;
 }
 .update button { min-height: 32px; padding: 4px 12px; }
+/* カメラの上の 3×3 グリッドと水平線 */
+.cam-deco { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.grid3 {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(to right, transparent calc(33.333% - .5px), rgba(255,255,255,.45) calc(33.333% - .5px), rgba(255,255,255,.45) calc(33.333% + .5px), transparent calc(33.333% + .5px),
+      transparent calc(66.667% - .5px), rgba(255,255,255,.45) calc(66.667% - .5px), rgba(255,255,255,.45) calc(66.667% + .5px), transparent calc(66.667% + .5px)),
+    linear-gradient(to bottom, transparent calc(33.333% - .5px), rgba(255,255,255,.45) calc(33.333% - .5px), rgba(255,255,255,.45) calc(33.333% + .5px), transparent calc(33.333% + .5px),
+      transparent calc(66.667% - .5px), rgba(255,255,255,.45) calc(66.667% - .5px), rgba(255,255,255,.45) calc(66.667% + .5px), transparent calc(66.667% + .5px));
+}
+/* 水平線：左右の短い線は固定、まん中の線が傾きに合わせて回る。水平になると1本につながって黄色になる */
+.level { position: absolute; left: 50%; top: 50%; width: 64%; height: 0; transform: translate(-50%, -50%); }
+.level span { position: absolute; top: -1px; height: 2px; background: rgba(255,255,255,.85); box-shadow: 0 0 2px rgba(0,0,0,.6); }
+.level .lv-l { left: 0; width: 14%; }
+.level .lv-r { right: 0; width: 14%; }
+.level .lv-c { left: 20%; width: 60%; transition: transform .08s linear; }
+.level.flat span { background: var(--accent); }
+.level.flat .lv-c { left: 0; width: 100%; }
+.level.flat .lv-l, .level.flat .lv-r { opacity: 0; }
 .sheet-back { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; }
 .sheet {
   width: min(420px, 100%); max-height: 100%; overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
@@ -284,6 +303,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 </main>
 
 <video id="video" playsinline muted autoplay></video>
+<div class="cam-deco" id="camDeco">
+  <div class="grid3" id="grid3"></div>
+  <div class="level" id="level" hidden><span class="lv-l"></span><span class="lv-c" id="levelC"></span><span class="lv-r"></span></div>
+</div>
 
 <nav class="controls" id="controls">
   <!-- 撮影中：どの段階でも同じ場所に同じ部品が来る -->
@@ -346,6 +369,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <label class="row"><span><b>シャッター音</b><small>撮影したときに「カシャ」と鳴らす</small></span><input type="checkbox" id="setShutter"></label>
     <div class="row"><span><b>自動撮影までの時間</b><small>合ってから撮影するまでの待ち時間（輪が減る時間）</small></span>
       <span class="sec"><input type="range" id="setCount" min="0.3" max="1.5" step="0.1" value="1"><output id="setCountVal">1.0秒</output></span></div>
+    <label class="row"><span><b>グリッド</b><small>カメラの上に 3×3 の線を出す</small></span><input type="checkbox" id="setGrid"></label>
+    <label class="row"><span><b>水平線</b><small>画面のまん中に、傾くと回る線を出す（水平になると黄色の1本になる）</small></span><input type="checkbox" id="setLevel"></label>
     <label class="row"><span><b>傾きセンサー</b><small>ビフォーを撮ったときのスマホの傾きと比べて表示する</small></span><input type="checkbox" id="setTilt"></label>
     <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。<br>傾きは、このアプリのカメラでビフォーを撮ったときだけ比べられます（写真から選んだビフォーには傾きの記録がありません）。</p>
     <p class="note">版：<span id="verText"></span>　<button class="small" id="checkUpdate" type="button">新しい版を確認</button></p>
@@ -394,7 +419,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   ];
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
   const settings = { ping: store.get('setPing', true), shutterSound: store.get('setShutter', true), tilt: store.get('setTilt', true),
-    countSec: Math.round(snap(store.get('setCount', 1), 0.3, 1.5, 0.1, 1) * 10) / 10 };
+    countSec: Math.round(snap(store.get('setCount', 1), 0.3, 1.5, 0.1, 1) * 10) / 10,
+    grid: store.get('setGrid', true), level: store.get('setLevel', true) };
   let lineMode = store.get('lineMode', true);   // true：線で重ねる／false：写真を薄く重ねる
   let lineMask = null, lineURL = null, lineColorKey = null;
   let guide = null;
@@ -651,9 +677,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('pair').hidden = isR; $('result').hidden = !isR;
 
     // ビデオの置き場所
-    if (isB) $('paneL').insertBefore(video, $('beforeImg'));
-    if (isA) $('paneR').insertBefore(video, $('overlay'));
+    if (isB) { $('paneL').insertBefore(video, $('beforeImg')); $('paneL').insertBefore($('camDeco'), $('beforeImg')); }
+    if (isA) { $('paneR').insertBefore(video, $('overlay')); $('paneR').appendChild($('camDeco')); }
     video.hidden = isR;
+    $('camDeco').hidden = isR;
+    $('grid3').hidden = !settings.grid;
     if (!isR) video.play().catch(() => {});
 
     $('beforeImg').hidden = !isA;
@@ -808,10 +836,24 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       tiltNow.pitch = tiltNow.pitch * 0.7 + pitch * 0.3;
       tiltNow.roll = roll == null || tiltNow.roll == null ? roll : tiltNow.roll * 0.7 + roll * 0.3;
     }
+    if (!levelQueued) { levelQueued = true; requestAnimationFrame(() => { levelQueued = false; updateLevel(); }); }
   }
-  // iPhoneはタップの中で許可を求める必要がある
+  // 水平線：端末が左に傾く（roll>0）と、本当の水平は画面上で時計回りに傾いて見える。インカメは鏡写しなので逆
+  let levelQueued = false;
+  function updateLevel() {
+    const el = $('level');
+    const r = tiltNow && tiltNow.roll;
+    if (!settings.level || r == null || state === 'result') { el.hidden = true; return; }
+    const deg = mirror ? -r : r;
+    el.hidden = false;
+    const flat = Math.abs(deg) < 1;
+    el.classList.toggle('flat', flat);
+    $('levelC').style.transform = flat ? '' : 'rotate(' + Math.max(-45, Math.min(45, deg)).toFixed(1) + 'deg)';
+  }
+  // iPhoneはタップの中で許可を求める必要がある（水平線のため、最初に画面に触れたときにも求める）
+  document.addEventListener('click', () => askTilt(), { capture: true });
   function askTilt() {
-    if (!settings.tilt || tiltListening) return;
+    if (!(settings.tilt || settings.level) || tiltListening) return;
     const start = () => { window.addEventListener('deviceorientation', onOrient); tiltListening = true; };
     const D = window.DeviceOrientationEvent;
     if (D && typeof D.requestPermission === 'function') {
@@ -1192,13 +1234,14 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(false); });
 
   // 設定画面
-  const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setTilt', 'tilt']];
+  const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setGrid', 'grid'], ['setLevel', 'level'], ['setTilt', 'tilt']];
   const showCount = () => { $('setCount').value = settings.countSec; $('setCountVal').textContent = settings.countSec.toFixed(1) + '秒'; };
   $('setCount').oninput = (e) => { settings.countSec = Math.round(snap(e.target.value, 0.3, 1.5, 0.1, 1) * 10) / 10; store.set('setCount', settings.countSec); showCount(); };
   $('gearBtn').onclick = () => { SET.forEach(([id, k]) => $(id).checked = settings[k]); showCount(); $('sheet').hidden = false; $('sheetClose').focus(); };
   SET.forEach(([id, k]) => $(id).onchange = (e) => {
     settings[k] = e.target.checked; store.set(id, settings[k]);
-    if (k === 'tilt' && settings.tilt) askTilt();
+    if ((k === 'tilt' && settings.tilt) || (k === 'level' && settings.level)) askTilt();
+    if (k === 'level') updateLevel();
     if (k === 'ping' && settings.ping) playPing();
     if (k === 'shutterSound' && settings.shutterSound) playShutter();
     render();
