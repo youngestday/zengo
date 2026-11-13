@@ -53,14 +53,23 @@ body {
 .overlay img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .overlay .tint { position: absolute; inset: 0; background: var(--tint, rgba(255, 30, 30, 0.4)); }
 /* 構図合わせのガイド */
-.guide {
-  position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3;
-  display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; pointer-events: none;
-}
+/* 動かす方向に合わせて、画面のその方向に出す（上へ＝上のほう、右へ＝右のほう…） */
+.guide { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
 .guide .g {
-  display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 10px;
-  background: rgba(0,0,0,.62); color: #fff; font-size: 12px; font-weight: 700; line-height: 1.1;
+  position: absolute; display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 4px 7px; border-radius: 10px; text-align: center; white-space: nowrap;
+  background: rgba(0,0,0,.62); color: #fff; font-size: 11px; font-weight: 700; line-height: 1.15;
+  transform: translate(-50%, -50%);
 }
+.guide .g.up    { left: 50%; top: 16%; }
+.guide .g.down  { left: 50%; top: 88%; }
+.guide .g.left  { left: 4px; top: 50%; transform: translateY(-50%); }
+.guide .g.right { right: 4px; top: 50%; transform: translateY(-50%); }
+.guide .g.fwd   { left: 50%; top: 32%; }
+.guide .g.back  { left: 50%; top: 68%; }
+.guide .g.rotr  { left: 62%; top: 50%; }
+.guide .g.rotl  { left: 38%; top: 50%; }
+.guide .g.mid   { left: 50%; top: 50%; }
 .guide .g b { font-size: 20px; line-height: 1; color: var(--accent); }
 .guide .g.big b { font-size: 28px; }
 .guide .g.ok { background: var(--ok); color: #062b12; }
@@ -140,6 +149,9 @@ body {
 .tint-btn.on { background: var(--accent); color: #111; border-color: var(--accent); }
 .tint-btn.wide { width: 104px; }
 .btn-pair { display: flex; gap: 4px; width: 104px; flex: none; }
+#modeBtn { gap: 1px; padding: 0 2px; font-size: 11px; font-weight: 500; color: var(--muted); width: 62px; }
+#tintBtn { width: 38px; padding: 0 2px; gap: 2px; font-size: 11px; }
+#modeBtn .cur { color: var(--accent); font-weight: 800; }
 .half-btn { width: 50px; height: 34px; min-height: 34px; padding: 0 4px; font-size: 12px; font-weight: 700; gap: 3px; white-space: nowrap; }
 .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); flex: none; }
 .zone-a { grid-area: a; display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -244,7 +256,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
           <input type="range" id="opacity" min="10" max="90" step="10" value="40">
         </div>
         <div class="btn-pair" id="overlayOpts">
-          <button class="half-btn" id="modeBtn" aria-label="重ね方を切り替える（写真／線）">線</button>
+          <button class="half-btn mode-btn" id="modeBtn" aria-label="重ね方を切り替える（線／写真）"><span id="modeLine">線</span>⇔<span id="modePhoto">写真</span></button>
           <button class="half-btn" id="tintBtn" aria-label="重ねる色を切り替える"><span class="swatch" id="tintSwatch"></span><span id="tintName">赤</span></button>
         </div>
       </div>
@@ -559,7 +571,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('tintName').textContent = tint.name;
     $('tintSwatch').style.background = tint.key === 'none' ? 'transparent' : tint.css.replace(/0\.4\)$/, '1)');
     $('overlayOpts').classList.toggle('invis', !isA || !overlayOn);
-    $('modeBtn').textContent = lineMode ? '線' : '写真';
+    $('modeLine').className = lineMode ? 'cur' : ''; $('modePhoto').className = lineMode ? '' : 'cur';
     $('overlayImg').hidden = lineMode; $('overlayTint').hidden = lineMode;
     $('overlayLines').hidden = !lineMode;
     if (lineMode && isA && overlayOn) ensureLines();
@@ -614,15 +626,25 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   // ---------- 音（ピタッ／シャッター）：Web Audio で合成する ----------
   let actx = null;
+  // iPhoneはマナーモード（消音スイッチ）だと Web の音が消される。
+  // 「再生」扱いにすると、マナーモードでも鳴る（シャッター音と同じ考え方）。対応していない端末では何もしない。
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
   function audio() {
     try {
       if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
-      if (actx.state === 'suspended') actx.resume();
+      if (actx.state !== 'running') actx.resume().catch(() => {});
     } catch { actx = null; }
     return actx;
   }
-  // iPhoneは画面を触ったときでないと音を出せないので、最初のタッチで準備しておく
-  document.addEventListener('pointerdown', () => audio(), { capture: true });
+  // iPhoneは画面を触ったときでないと音を出せない。触るたびに準備し、最初の1回は無音を鳴らして音の出口を開けておく
+  let unlocked = false;
+  function unlockAudio() {
+    const a = audio(); if (!a) return;
+    if (!unlocked) {
+      try { const src = a.createBufferSource(); src.buffer = a.createBuffer(1, 1, 22050); src.connect(a.destination); src.start(0); unlocked = true; } catch {}
+    }
+  }
+  ['touchstart', 'touchend', 'pointerdown', 'click', 'keydown'].forEach(t => document.addEventListener(t, unlockAudio, { capture: true, passive: true }));
   function beep(freq, t0, dur, vol = 0.18) {
     const a = audio(); if (!a) return;
     const o = a.createOscillator(), g = a.createGain();
@@ -952,24 +974,24 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (el.hidden) return;
     const items = [];
     const add = (arrow, text, size, cls = '') => items.push(`<span class="g ${cls} ${size >= 2 ? 'big' : ''}"><b>${arrow}</b>${text}</span>`);
-    if (guide.lost) { el.innerHTML = '<span class="g weak">ビフォーの景色を画面に入れてください</span>'; return; }
+    if (guide.lost) { el.innerHTML = '<span class="g mid weak">ビフォーの景色を<br>画面に入れてください</span>'; return; }
     const sx = Math.abs(guide.dx) / FW * 100, sy = Math.abs(guide.dy) / FH * 100;   // 画面に対するずれ（%）
     const lvl = (v, a, b) => v < a ? 0 : v < b ? 1 : 2;
     const lx = lvl(sx, 4, 12), ly = lvl(sy, 3, 10);
-    if (ly) add(guide.dy < 0 ? '↑' : '↓', guide.dy < 0 ? '上へ' : '下へ', ly);
-    if (lx) add(guide.dx < 0 ? '←' : '→', guide.dx < 0 ? '左へ' : '右へ', lx);
+    if (ly) add(guide.dy < 0 ? '↑' : '↓', guide.dy < 0 ? '上へ' : '下へ', ly, guide.dy < 0 ? 'up' : 'down');
+    if (lx) add(guide.dx < 0 ? '←' : '→', guide.dx < 0 ? '左へ' : '右へ', lx, guide.dx < 0 ? 'left' : 'right');
     const zs = Math.abs(Math.log(guide.scale)) * 100;                                    // 大きさの違い（%）
     const lz = lvl(zs, 5, 12);
-    if (lz) add(guide.scale > 1 ? '⇡' : '⇣', guide.scale > 1 ? '前へ（近づく）' : '後ろへ（離れる）', lz);
+    if (lz) add(guide.scale > 1 ? '⇡' : '⇣', guide.scale > 1 ? '前へ' : '後ろへ', lz, guide.scale > 1 ? 'fwd' : 'back');
     const la = lvl(Math.abs(guide.deg), 2.5, 6);
-    if (la) add(guide.deg > 0 ? '↺' : '↻', (guide.deg > 0 ? '左に傾ける ' : '右に傾ける ') + Math.round(Math.abs(guide.deg)) + '°', la);
-    if (!items.length) add('◎', 'ぴったり', 1, 'ok');
+    if (la) add(guide.deg > 0 ? '↺' : '↻', (guide.deg > 0 ? '左に<br>傾ける ' : '右に<br>傾ける ') + Math.round(Math.abs(guide.deg)) + '°', la, guide.deg > 0 ? 'rotl' : 'rotr');
+    if (!items.length && $('pita').hidden) add('◎', 'ぴったり', 1, 'ok mid');
     el.innerHTML = items.join('');
   }
 
   let tick = 0;
   setInterval(() => {
-    if (state !== 'after' || !beforeFeat || !stream || !video.videoWidth || shooting || document.hidden) return;
+    if (state !== 'after' || !beforeFeat || !stream || !video.videoWidth || shooting || document.hidden || window.__freeze) return;
     drawA(video, video.videoWidth, video.videoHeight);
     const live = featFromA();
     const sc = matchPercent(beforeFeat, live);
@@ -1027,6 +1049,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('sheetClose').onclick = () => { $('sheet').hidden = true; };
   $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) $('sheet').hidden = true; });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('sheet').hidden = true; });
+  if (location.hash === '#test') window.__guide = { set(v) { guide = v; guideOn = true; render(); renderGuide(); } };
   if (location.hash === '#test') window.__tilt = { onOrient, get now() { return tiltNow; }, set before(v) { tiltBefore = v; }, renderTilt };
 
   $('guideBtn').onclick = () => { guideOn = !guideOn; guide = null; render(); };
