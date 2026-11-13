@@ -79,6 +79,33 @@ body {
   padding: 3px 8px; border-radius: 99px; background: rgba(0,0,0,.55); color: #fff;
 }
 .match.ok { background: var(--ok); color: #062b12; }
+.badges { position: absolute; top: 8px; right: 8px; z-index: 3; display: grid; gap: 4px; justify-items: end; }
+.badges .match { position: static; }
+.pane.aligned::after { content: ""; position: absolute; inset: 0; border: 4px solid var(--ok); border-radius: 4px; z-index: 5; pointer-events: none; }
+.pita {
+  position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 4; pointer-events: none;
+  background: var(--ok); color: #062b12; font-weight: 800; font-size: 18px; padding: 8px 16px; border-radius: 99px; white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+.pita.pop { animation: pop .35s ease-out; }
+@keyframes pop { from { transform: translate(-50%, -50%) scale(.6); opacity: 0 } to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }
+@media (prefers-reduced-motion: reduce) { .pita.pop { animation: none; } }
+.gear {
+  position: absolute; z-index: 6; top: 8px; left: 8px;
+  min-height: 32px; padding: 4px 10px; font-size: 12px; border-radius: 99px;
+  background: rgba(24,25,27,.85);
+}
+.sheet-back { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; }
+.sheet {
+  width: min(420px, 100%); max-height: 100%; overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 16px; padding: 16px; display: grid; gap: 10px;
+}
+.sheet h2 { margin: 0 0 4px; font-size: 17px; }
+.sheet .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.sheet .row span { display: grid; gap: 2px; }
+.sheet .row small { color: var(--muted); font-size: 12px; }
+.sheet .row input { width: 24px; height: 24px; accent-color: var(--accent); flex: none; }
+.sheet .note { color: var(--muted); font-size: 12px; margin: 4px 0; }
 .placeholder {
   position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px;
   color: var(--muted); padding: 12px; font-size: 13px;
@@ -142,6 +169,7 @@ body {
   .res > * { width: 100%; }
 }
 .invis { visibility: hidden; }
+@media (orientation: landscape) { .gear { top: auto; bottom: 8px; } }
 .group { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
 button, .btn {
   font: inherit; font-size: 13px; color: var(--fg); background: var(--panel);
@@ -174,6 +202,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 <body>
 
 <main class="stage" id="stage">
+  <button class="gear" id="gearBtn" aria-label="設定を開く">⚙︎ 設定</button>
   <div class="pair" id="pair">
     <div class="pane" id="paneL">
       <span class="tag" id="tagL">BEFORE</span>
@@ -184,7 +213,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       <span class="tag" id="tagR">AFTER</span>
       <div class="placeholder" id="phR"><b>アフター</b>先に左側でビフォーを撮るか、<br>写真から選んでください</div>
       <div class="overlay" id="overlay" hidden><img id="overlayImg" alt=""><span class="tint" id="overlayTint"></span><img id="overlayLines" alt="" hidden></div>
-      <div class="match" id="match" hidden>一致 --%</div>
+      <div class="badges">
+        <div class="match" id="match" hidden>一致 --%</div>
+        <div class="match" id="tilt" hidden></div>
+      </div>
+      <div class="pita" id="pita" hidden>ピタッ！</div>
       <div class="guide" id="guide" hidden></div>
       <div class="flash" id="flashR"></div>
     </div>
@@ -218,7 +251,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       <div class="tool">
         <button class="overlay-btn" id="autoBtn" aria-pressed="false">自動OFF</button>
         <div class="slider" id="thresholdWrap">
-          <label for="threshold">一致 <span id="thresholdVal">80%</span> で撮る</label>
+          <label for="threshold">一致 <span id="thresholdVal">80%</span> <span id="thresholdWord">でピタッ</span></label>
           <input type="range" id="threshold" min="50" max="90" step="5" value="80">
         </div>
         <button class="tint-btn wide" id="guideBtn" aria-pressed="false">ガイドOFF</button>
@@ -249,6 +282,18 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <button class="small" id="newBtn">最初から</button>
   </div>
 </nav>
+
+<!-- 設定 -->
+<div class="sheet-back" id="sheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <h2 id="sheetTitle">設定</h2>
+    <label class="row"><span><b>ピタッの音</b><small>ビフォーと合ったときに「ピッピッ」と鳴らす</small></span><input type="checkbox" id="setPing"></label>
+    <label class="row"><span><b>シャッター音</b><small>撮影したときに「カシャ」と鳴らす</small></span><input type="checkbox" id="setShutter"></label>
+    <label class="row"><span><b>傾きセンサー</b><small>ビフォーを撮ったときのスマホの傾きと比べて表示する</small></span><input type="checkbox" id="setTilt"></label>
+    <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。<br>傾きは、このアプリのカメラでビフォーを撮ったときだけ比べられます（写真から選んだビフォーには傾きの記録がありません）。</p>
+    <button class="primary" id="sheetClose">閉じる</button>
+  </div>
+</div>
 
 <script>
 (() => {
@@ -290,6 +335,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     { key: 'none',  name: 'なし', css: 'transparent',            line: [255, 255, 255] },
   ];
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
+  const settings = { ping: store.get('setPing', true), shutterSound: store.get('setShutter', true), tilt: store.get('setTilt', true) };
   let lineMode = store.get('lineMode', true);   // true：線で重ねる／false：写真を薄く重ねる
   let lineMask = null, lineURL = null, lineColorKey = null;
   let guide = null;
@@ -506,7 +552,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('autoBtn').textContent = autoOn ? '自動ON' : '自動OFF';
     $('autoBtn').classList.toggle('on', autoOn);
     $('autoBtn').setAttribute('aria-pressed', String(autoOn));
-    $('thresholdWrap').classList.toggle('invis', !isA || !autoOn);
+    $('thresholdWrap').classList.toggle('invis', !isA);
+    $('thresholdWord').textContent = autoOn ? 'で撮る' : 'でピタッ';
     const tint = TINTS[tintIdx];
     $('overlay').style.setProperty('--tint', tint.css);
     $('tintName').textContent = tint.name;
@@ -531,7 +578,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   async function go(next) {
     state = next; clearCamError();
-    if (next === 'after') { afterEnteredAt = performance.now(); matchScore = null; holdSince = 0; guide = null; guideOn = false; }
+    if (next === 'after') { afterEnteredAt = performance.now(); matchScore = null; holdSince = 0; guide = null; guideOn = false; aligned = false; }
+    if (next !== 'after') { $('pita').hidden = true; $('paneR').classList.remove('aligned'); $('tilt').hidden = true; }
     render();
     // 完成画面でもカメラは止めない（撮り直しのたびにカメラを起動し直さないため）
     if (next !== 'result' && !cameraAlive()) await startCamera();
@@ -562,6 +610,87 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (resultURL) URL.revokeObjectURL(resultURL);
     resultURL = URL.createObjectURL(resultBlob);
     $('resultImg').src = resultURL;
+  }
+
+  // ---------- 音（ピタッ／シャッター）：Web Audio で合成する ----------
+  let actx = null;
+  function audio() {
+    try {
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+    } catch { actx = null; }
+    return actx;
+  }
+  // iPhoneは画面を触ったときでないと音を出せないので、最初のタッチで準備しておく
+  document.addEventListener('pointerdown', () => audio(), { capture: true });
+  function beep(freq, t0, dur, vol = 0.18) {
+    const a = audio(); if (!a) return;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, a.currentTime + t0);
+    g.gain.linearRampToValueAtTime(vol, a.currentTime + t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur);
+    o.connect(g).connect(a.destination); o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02);
+  }
+  function playPing() { if (!settings.ping) return; beep(1319, 0, 0.09); beep(1760, 0.1, 0.16); }
+  function playShutter() {
+    if (!settings.shutterSound) return;
+    const a = audio(); if (!a) return;
+    // 「カ」「シャ」：短いノイズを2回
+    [[0, 0.035, 3000], [0.06, 0.09, 1800]].forEach(([t0, dur, f]) => {
+      const len = Math.ceil(a.sampleRate * dur), buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+      const src = a.createBufferSource(), bp = a.createBiquadFilter(), g = a.createGain();
+      src.buffer = buf; bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 0.8; g.gain.value = 0.9;
+      src.connect(bp).connect(g).connect(a.destination); src.start(a.currentTime + t0);
+    });
+  }
+
+  // ---------- 傾きセンサー ----------
+  // 端末の傾き（deviceorientation）から「画面の上方向」と「カメラの向き」を求める。
+  // pitch：カメラが水平より上を向いている角度（+が上）／roll：画面の傾き（+が左に傾いている）
+  let tiltNow = null, tiltBefore = null, tiltListening = false, tiltAsked = false;
+  function screenAngle() {
+    const a = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
+    return ((a % 360) + 360) % 360;
+  }
+  function onOrient(e) {
+    if (e.beta == null || e.gamma == null) return;
+    const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
+    const ux = -Math.sin(g) * Math.cos(b), uy = Math.sin(b), uz = Math.cos(g) * Math.cos(b);   // 端末から見た「上」
+    const th = screenAngle() * Math.PI / 180;
+    const sx = ux * Math.cos(th) - uy * Math.sin(th), sy = ux * Math.sin(th) + uy * Math.cos(th);
+    const pitch = Math.asin(Math.max(-1, Math.min(1, -uz))) * 180 / Math.PI;
+    const roll = Math.hypot(sx, sy) > 0.3 ? Math.atan2(sx, sy) * 180 / Math.PI : null;
+    if (!tiltNow) tiltNow = { pitch, roll };
+    else {
+      tiltNow.pitch = tiltNow.pitch * 0.7 + pitch * 0.3;
+      tiltNow.roll = roll == null || tiltNow.roll == null ? roll : tiltNow.roll * 0.7 + roll * 0.3;
+    }
+  }
+  // iPhoneはタップの中で許可を求める必要がある
+  function askTilt() {
+    if (!settings.tilt || tiltListening) return;
+    const start = () => { window.addEventListener('deviceorientation', onOrient); tiltListening = true; };
+    const D = window.DeviceOrientationEvent;
+    if (D && typeof D.requestPermission === 'function') {
+      if (tiltAsked) return; tiltAsked = true;
+      D.requestPermission().then(r => { if (r === 'granted') start(); }).catch(() => {});
+    } else if (D) start();
+  }
+  function renderTilt() {
+    const el = $('tilt');
+    if (state !== 'after' || !settings.tilt || !tiltBefore || !tiltNow) { el.hidden = true; return null; }
+    const dp = tiltNow.pitch - tiltBefore.pitch;
+    const dr = tiltNow.roll != null && tiltBefore.roll != null ? ((tiltNow.roll - tiltBefore.roll + 540) % 360) - 180 : 0;
+    const parts = [];
+    if (Math.abs(dp) >= 1.5) parts.push((dp > 0 ? '↓ 傾き ' : '↑ 傾き ') + Math.round(Math.abs(dp)) + '° ' + (dp > 0 ? '下へ' : '上へ'));
+    if (Math.abs(dr) >= 1.5) parts.push((dr > 0 ? '↻ ' : '↺ ') + Math.round(Math.abs(dr)) + '° ' + (dr > 0 ? '右に回す' : '左に回す'));
+    const ok = !parts.length;
+    el.textContent = ok ? '✓ 傾き OK' : parts.join('　');
+    el.classList.toggle('ok', ok);
+    el.hidden = false;
+    return ok;
   }
 
   // ---------- 線モード：ビフォーの輪郭（テーブルや冷蔵庫の縁など）だけを取り出す ----------
@@ -760,14 +889,24 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   const HOLD_MS = 600;     // しきい値を超えた状態がこの時間続いたら撮る（手ぶれ防止）
   const GRACE_MS = 1500;   // アフター画面に入った直後は撮らない
+  // 一致度が設定値を超えたら「ピタッ」（緑の枠＋表示＋音）。下がったら（5%の余裕を見て）また鳴らせるようにする
+  let aligned = false;
   function renderMatch() {
     const el = $('match');
     el.hidden = state !== 'after' || matchScore === null;
     if (!el.hidden) {
-      const ok = autoOn && matchScore >= threshold;
-      el.textContent = '一致 ' + Math.round(matchScore) + '%' + (autoOn ? ' / ' + threshold + '%' : '');
-      el.classList.toggle('ok', ok);
+      el.textContent = '一致 ' + Math.round(matchScore) + '% / ' + threshold + '%';
+      el.classList.toggle('ok', matchScore >= threshold);
     }
+    renderTilt();
+    const now = state === 'after' && matchScore !== null && (aligned ? matchScore >= threshold - 5 : matchScore >= threshold);
+    if (now && !aligned) {
+      playPing();
+      const p = $('pita'); p.hidden = false; p.classList.remove('pop'); void p.offsetWidth; p.classList.add('pop');
+    }
+    if (!now) $('pita').hidden = true;
+    aligned = now;
+    $('paneR').classList.toggle('aligned', aligned);
     renderGuide();
   }
 
@@ -814,6 +953,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     renderMatch();
     const now = performance.now();
     if (!autoOn || now - afterEnteredAt < GRACE_MS || matchScore < threshold) { holdSince = 0; return; }
+    // 傾きセンサーが使えるときは、傾きも合っているときだけ自動で撮る
+    if (renderTilt() === false) { holdSince = 0; return; }
     if (!holdSince) holdSince = now;
     if (now - holdSince >= HOLD_MS) shootAfter();
   }, 150);
@@ -823,28 +964,49 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const frame = grabFrame();
     if (!frame) { msg('カメラの準備中です。少し待ってからもう一度押してください'); return; }
     shooting = true;
+    playShutter();
     try { flash('flashR'); await setAfter(frame); } finally { shooting = false; holdSince = 0; }
   }
 
   // ---------- 操作 ----------
   $('shutter').onclick = async () => {
+    askTilt();
     if (state === 'after') return shootAfter();
     const frame = grabFrame();
     if (!frame) { msg('カメラの準備中です。少し待ってからもう一度押してください'); return; }
-    if (state === 'before') { flash('flashL'); await setBefore(frame); }
+    if (state === 'before') {
+      tiltBefore = tiltNow ? { ...tiltNow } : null;   // ビフォーを撮った瞬間の傾きを覚える
+      playShutter(); flash('flashL'); await setBefore(frame);
+    }
   };
+  // 設定画面
+  const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setTilt', 'tilt']];
+  $('gearBtn').onclick = () => { SET.forEach(([id, k]) => $(id).checked = settings[k]); $('sheet').hidden = false; $('sheetClose').focus(); };
+  SET.forEach(([id, k]) => $(id).onchange = (e) => {
+    settings[k] = e.target.checked; store.set(id, settings[k]);
+    if (k === 'tilt' && settings.tilt) askTilt();
+    if (k === 'ping' && settings.ping) playPing();
+    if (k === 'shutterSound' && settings.shutterSound) playShutter();
+    render();
+  });
+  $('sheetClose').onclick = () => { $('sheet').hidden = true; };
+  $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) $('sheet').hidden = true; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('sheet').hidden = true; });
+  if (location.hash === '#test') window.__tilt = { onOrient, get now() { return tiltNow; }, set before(v) { tiltBefore = v; }, renderTilt };
+
   $('guideBtn').onclick = () => { guideOn = !guideOn; guide = null; render(); };
   $('modeBtn').onclick = () => { lineMode = !lineMode; store.set('lineMode', lineMode); render(); };
   $('tintBtn').onclick = () => { tintIdx = (tintIdx + 1) % TINTS.length; store.set('tint', TINTS[tintIdx].key); render(); };
   $('autoBtn').onclick = () => { autoOn = !autoOn; holdSince = 0; store.set('autoOn', autoOn); render(); };
   $('threshold').oninput = (e) => { threshold = +e.target.value; holdSince = 0; store.set('threshold', threshold); render(); };
 
+  $('pickBtn').addEventListener('click', () => askTilt());
   $('pickInput').onchange = async (e) => {
     const file = e.target.files && e.target.files[0]; e.target.value = '';
     if (!file) return;
     try {
       const c = await loadFile(file);
-      if (state === 'before') await setBefore(c); else if (state === 'after') await setAfter(c);
+      if (state === 'before') { tiltBefore = null; await setBefore(c); } else if (state === 'after') await setAfter(c);
     } catch { msg('この写真は読み込めませんでした。別の写真を選んでください'); }
   };
 
