@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-10">
+<meta name="zengo-version" content="2026.11.13-11">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -143,6 +143,17 @@ body {
 .level.flat span { background: var(--accent); }
 .level.flat .lv-c { left: 0; width: 100%; }
 .level.flat .lv-l, .level.flat .lv-r { opacity: 0; }
+/* 前後の傾き：丸が上下に動く。スマホがまっすぐ立つ（垂直）と線の上に乗って黄色になる */
+.level .lv-dot {
+  position: absolute; left: 50%; top: 0; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.9); box-shadow: 0 0 2px rgba(0,0,0,.6); transition: transform .08s linear;
+}
+.level.upright .lv-dot { background: var(--accent); border-color: var(--accent); }
+.level .lv-tip {
+  position: absolute; left: 50%; top: 74px; transform: translateX(-50%); white-space: nowrap;
+  font-size: 11px; font-weight: 700; color: #fff; background: rgba(0,0,0,.55); padding: 2px 8px; border-radius: 99px;
+}
+.level .lv-tip.ok { background: var(--accent); color: #111; }
 .sheet-back { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; }
 .sheet {
   width: min(420px, 100%); max-height: 100%; overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
@@ -305,7 +316,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 <video id="video" playsinline muted autoplay></video>
 <div class="cam-deco" id="camDeco">
   <div class="grid3" id="grid3"></div>
-  <div class="level" id="level" hidden><span class="lv-l"></span><span class="lv-c" id="levelC"></span><span class="lv-r"></span></div>
+  <div class="level" id="level" hidden><span class="lv-l"></span><span class="lv-c" id="levelC"></span><span class="lv-r"></span><i class="lv-dot" id="levelDot"></i><b class="lv-tip" id="levelTip"></b></div>
 </div>
 
 <nav class="controls" id="controls">
@@ -370,7 +381,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <div class="row"><span><b>自動撮影までの時間</b><small>合ってから撮影するまでの待ち時間（輪が減る時間）</small></span>
       <span class="sec"><input type="range" id="setCount" min="0.3" max="1.5" step="0.1" value="1"><output id="setCountVal">1.0秒</output></span></div>
     <label class="row"><span><b>グリッド</b><small>カメラの上に 3×3 の線を出す</small></span><input type="checkbox" id="setGrid"></label>
-    <label class="row"><span><b>水平線</b><small>画面のまん中に、傾くと回る線を出す（水平になると黄色の1本になる）</small></span><input type="checkbox" id="setLevel"></label>
+    <label class="row"><span><b>水平・垂直ガイド</b><small>まん中の線が左右の傾きで回り（水平で黄色の1本に）、丸が前後の傾きで上下に動く（スマホがまっすぐ立つと黄色に）</small></span><input type="checkbox" id="setLevel"></label>
     <label class="row"><span><b>傾きセンサー</b><small>ビフォーを撮ったときのスマホの傾きと比べて表示する</small></span><input type="checkbox" id="setTilt"></label>
     <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。<br>傾きは、このアプリのカメラでビフォーを撮ったときだけ比べられます（写真から選んだビフォーには傾きの記録がありません）。</p>
     <p class="note">版：<span id="verText"></span>　<button class="small" id="checkUpdate" type="button">新しい版を確認</button></p>
@@ -849,6 +860,15 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const flat = Math.abs(deg) < 1;
     el.classList.toggle('flat', flat);
     $('levelC').style.transform = flat ? '' : 'rotate(' + Math.max(-45, Math.min(45, deg)).toFixed(1) + 'deg)';
+    // 前後の傾き（pitch）：カメラが上を向くと丸は下へ（水平線が下がって見えるのと同じ向き）
+    const pt = tiltNow.pitch, upright = Math.abs(pt) < 1.5;
+    el.classList.toggle('upright', upright);
+    $('levelDot').style.transform = upright ? '' : 'translateY(' + Math.max(-60, Math.min(60, pt * 3)).toFixed(1) + 'px)';
+    const tip = $('levelTip');
+    if (upright && flat) { tip.textContent = '水平・垂直 OK'; tip.className = 'lv-tip ok'; }
+    else if (!upright) { tip.textContent = (pt > 0 ? '↓ 下に向ける ' : '↑ 上に向ける ') + Math.round(Math.abs(pt)) + '°'; tip.className = 'lv-tip'; }
+    else { tip.textContent = ''; tip.className = 'lv-tip'; }
+    tip.hidden = !tip.textContent;
   }
   // iPhoneはタップの中で許可を求める必要がある（水平線のため、最初に画面に触れたときにも求める）
   document.addEventListener('click', () => askTilt(), { capture: true });
