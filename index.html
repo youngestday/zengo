@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-31">
+<meta name="zengo-version" content="2026.11.13-32">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -422,7 +422,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <div class="row"><span><b>ビフォーの自動撮影までの時間</b><small>水平・垂直がそろってから撮るまで。じっくり構えたいときは長めに</small></span>
       <span class="sec"><input type="range" id="setCountB" min="0.5" max="2" step="0.1" value="1"><output id="setCountBVal">1.0秒</output></span></div>
     <label class="row"><span><b>グリッド</b><small>カメラの上に 3×3 の線を出す</small></span><input type="checkbox" id="setGrid"></label>
-    <label class="row"><span><b>四隅（手前）も合わせる</b><small>天井や壁だけでなく、画面の四隅の家具や床の輪郭も一致度に入れる。立ち位置まで合わせられる。手前の家具を動かす片付けではOFFに</small></span><input type="checkbox" id="setCorners"></label>
+    <label class="row"><span><b>手前（画面の下のほう）も合わせる</b><small>奥の壁や天井だけでなく、手前の家具や床も合っているときだけピタッにする。立ち位置まで合わせられる。手前の家具を動かす片付けではOFFに</small></span><input type="checkbox" id="setFront"></label>
     <label class="row"><span><b>水平・垂直ガイド</b><small>まん中の線が左右の傾きで回り（水平で黄色の1本に）、下のスマホ形の枠が前後の傾きで台形になる（まっすぐ立つと黄色に）</small></span><input type="checkbox" id="setLevel"></label>
     <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。</p>
     <p class="note">版：<span id="verText"></span>　<button class="small" id="checkUpdate" type="button">新しい版を確認</button></p>
@@ -474,7 +474,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     // 範囲と初期値を変えたので、保存先の名前も変えて初期値から始める
     countSec: 0.3,   // アフターは最後の微調整でほぼブレないので、ピタッから0.3秒で撮る（固定）
     countBefore: Math.round(snap(store.get('setCountB2', 1), 0.5, 2, 0.1, 1) * 10) / 10,
-    grid: store.get('setGrid', true), level: store.get('setLevel', true), corners: store.get('setCorners', true) };
+    grid: store.get('setGrid', true), level: store.get('setLevel', true), front: store.get('setFront', true) };   // 測り方を変えたので、保存先の名前も変えてONから始める
   const lineMode = true;   // 撮影中はビフォーの輪郭の線だけを重ねる（写真の重ね合わせは完成画面の確認で使う）
   let lineMask = null, lineURL = null, lineColorKey = null;
   let guide = null;
@@ -1174,55 +1174,89 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     gL.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, fL.width, fL.height);
     gL.restore();
   }
-  let beforeLines = null;   // { lines, total }（ビフォーの長い直線）
+  let beforeLines = null;   // { lines, total, rg }（ビフォーの長い直線と、場所ごとの輪郭の向き）
   function prepBeforeLines(bc) {
     drawL(bc, bc.width, bc.height);
     const E = buildLineMask(fL, 480, 0.02, 0.3);
     const lines = straightLines(E);
-    const { w, h, mask } = E;
-    // 四隅（左上・右上・左下・右下）の輪郭の点も覚えておく
-    const corners = [[], [], [], []];
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const i = y * w + x; if (!mask[i]) continue;
-      const cx = x < w * 0.35 ? 0 : x >= w * 0.65 ? 1 : -1, cy = y < h * 0.3 ? 0 : y >= h * 0.7 ? 1 : -1;
-      if (cx >= 0 && cy >= 0) corners[cy * 2 + cx].push(i);
-    }
-    beforeLines = { lines, total: lines.reduce((t, l) => t + l.length, 0), w, h, corners };
+    beforeLines = { lines, total: lines.reduce((t, l) => t + l.length, 0), w: E.w, h: E.h, rg: rgGrad(fL) };
   }
+
+  // ---------- 場所ごとのずれ：画面を 上・中・下 × 左・右 の6つに分け、それぞれビフォーと何ピクセルずれているかを探す ----------
+  // 上半分が合っていても、手前（下のほう）がずれていれば点数が下がる。
+  // 輪郭の「向き」をずらしながら重ね、一番よく重なるずらし方を探す。片付けでなくなった物は、どうずらしても重ならないので無視される。
+  const RW = 108, RH = 192, RG_R = 18;   // 作業用の大きさと、探すずれの幅（高さの約9%）
+  const fR = document.createElement('canvas'); fR.width = RW; fR.height = RH;
+  const gR = fR.getContext('2d', { willReadFrequently: true });
+  function rgGrad(src) {
+    gR.drawImage(src, 0, 0, RW, RH);
+    const d = gR.getImageData(0, 0, RW, RH).data, n = RW * RH;
+    let a = new Float32Array(n), b = new Float32Array(n);
+    for (let i = 0; i < n; i++) a[i] = d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+    for (let r = 0; r < 2; r++) {
+      for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) { const i = y * RW + x; b[i] = ((x ? a[i - 1] : a[i]) + 2 * a[i] + (x < RW - 1 ? a[i + 1] : a[i])) / 4; }
+      for (let y = 0; y < RH; y++) for (let x = 0; x < RW; x++) { const i = y * RW + x; a[i] = ((y ? b[i - RW] : b[i]) + 2 * b[i] + (y < RH - 1 ? b[i + RW] : b[i])) / 4; }
+    }
+    // 輪郭の向き（強い輪郭も弱い輪郭も同じくらいに数えるよう、強さはならす）
+    const gx = new Float32Array(n), gy = new Float32Array(n);
+    for (let y = 1; y < RH - 1; y++) for (let x = 1; x < RW - 1; x++) {
+      const i = y * RW + x, X = a[i + 1] - a[i - 1], Y = a[i + RW] - a[i - RW], m = Math.hypot(X, Y) + 6;
+      gx[i] = X / m; gy[i] = Y / m;
+    }
+    return { gx, gy };
+  }
+  function rgCorr(B, L, x0, x1, y0, y1, dx, dy) {
+    let s = 0, bb = 0, ll = 0;
+    const ya = Math.max(y0, 1 - dy), yb = Math.min(y1, RH - 1 - dy), xa = Math.max(x0, 1 - dx), xb = Math.min(x1, RW - 1 - dx);
+    for (let y = ya; y < yb; y++) {
+      let i = y * RW + xa, j = (y + dy) * RW + xa + dx;
+      for (let x = xa; x < xb; x++, i++, j++) {
+        const bx = B.gx[i], by = B.gy[i], lx = L.gx[j], ly = L.gy[j];
+        s += bx * lx + by * ly; bb += bx * bx + by * by; ll += lx * lx + ly * ly;
+      }
+    }
+    return bb > 0 && ll > 0 ? s / Math.sqrt(bb * ll) : 0;
+  }
+  // 戻り値：6つの場所それぞれの { row, d }（d＝ずれのピクセル。判断できない場所は入れない）
+  function rgShifts(B, L) {
+    const out = [], m = 4;
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) {
+      const x0 = Math.round(m + c * (RW - 2 * m) / 2), x1 = Math.round(m + (c + 1) * (RW - 2 * m) / 2);
+      const y0 = Math.round(m + r * (RH - 2 * m) / 3), y1 = Math.round(m + (r + 1) * (RH - 2 * m) / 3);
+      const s0 = rgCorr(B, L, x0, x1, y0, y1, 0, 0);
+      let best = { s: -1, dx: 0, dy: 0 }, sum = 0, sq = 0, k = 0;
+      for (let dy = -RG_R; dy <= RG_R; dy += 2) for (let dx = -RG_R; dx <= RG_R; dx += 2) {
+        const v = rgCorr(B, L, x0, x1, y0, y1, dx, dy); sum += v; sq += v * v; k++;
+        if (v > best.s) best = { s: v, dx, dy };
+      }
+      const mean = sum / k, sd = Math.sqrt(Math.max(1e-9, sq / k - mean * mean)), b0 = best;
+      for (let dy = b0.dy - 1; dy <= b0.dy + 1; dy++) for (let dx = b0.dx - 1; dx <= b0.dx + 1; dx++) {
+        const v = rgCorr(B, L, x0, x1, y0, y1, dx, dy); if (v > best.s) best = { s: v, dx, dy };
+      }
+      // ずらさなくてもほぼ同じだけ重なる → ずれ0／はっきりした重なりの山がある → そのずれ／どちらでもない（物が消えた等）→ 使わない
+      if (s0 >= 0.3 && best.s - s0 < 0.06) out.push({ row: r, d: 0 });
+      else if (best.s >= 0.3 && (b0.s - mean) / sd >= 2.8) out.push({ row: r, d: Math.hypot(best.dx, best.dy) });
+    }
+    return out;
+  }
+  // 0〜100。行（上・中・下）ごとにずれを点数にし、いちばん悪い行を使う。
+  // ずれが高さの1%（2ピクセル）までは満点、約10%で0点。手前を合わせないときは下の行を使わない
+  function rgScore(shifts, useBottom) {
+    const rows = [[], [], []];
+    for (const t of shifts) if (useBottom || t.row < 2) rows[t.row].push(Math.max(0, 1 - Math.max(0, t.d - 2) / 19) * 100);
+    const sc = rows.filter(r => r.length).map(r => r.reduce((a, b) => a + b, 0) / r.length);
+    return sc.length >= 2 ? Math.min(...sc) : null;
+  }
+
   // 0〜100。ビフォーの長い直線が、今の映像の同じ位置に何ピクセルずれて見つかるか。
   // 近くに見つからない線（動いた・なくなった物）は外すが、見つかった割合が少ないときは点数を下げる（大きくずれているため）。
   // ビフォーに長い直線が少ないときは null（そのときはマスごとの一致度を使う）
-  // 戻り値 { line, corner }：line＝動かない直線の一致度、corner＝四隅の一致度
+  // 戻り値 { line, region }：line＝動かない直線の一致度、region＝場所ごとのずれの一致度（いちばん悪い行）
   function liveCheck() {
     if (!beforeLines) return null;
     const E = buildLineMask(fL, 480, 0.02, 0.3), d = distMap(E.mask, E.w, E.h);
-    const R = 480 * 0.05, D = MATCH_D;
-    const out = { line: lineMatchOn(d, R, D), corner: null };
-    // 四隅：それぞれの隅の輪郭を少しずつずらして、一番よく重なるずらし方を探す。
-    // ずらさない（0,0）のが一番なら合っている。ずらしたほうがはっきりよく重なるなら、その分ずれている。
-    // 片付けでなくなった物の輪郭は、どうずらしても重ならないので判定に影響しない
-    const cs = [], { w, h } = beforeLines;
-    const hit = (P, dx, dy) => { let n = 0; for (const i of P) { const x = i % w + dx, y = ((i / w) | 0) + dy; if (x >= 0 && y >= 0 && x < w && y < h && d[y * w + x] <= 2.5) n++; } return n; };
-    for (const P0 of beforeLines.corners) {
-      if (P0.length < 25) continue;
-      const P = P0.length > 400 ? P0.filter((_, k) => k % Math.ceil(P0.length / 400) === 0) : P0;
-      const n0 = hit(P, 0, 0);
-      // 一番よく重なるずらし方と、小さなずらし方（±6）の中で一番のものを探し、ほぼ同じなら小さいほうを選ぶ
-      // （散らかった物がたまたま重なって、大きなずれと見誤らないように）
-      let bn = n0, bx = 0, by = 0, sn = n0, sx = 0, sy = 0;
-      for (let dy = -20; dy <= 20; dy += 2) for (let dx = -20; dx <= 20; dx += 2) {
-        if (!dx && !dy) continue;
-        const n = hit(P, dx, dy);
-        if (n > bn) { bn = n; bx = dx; by = dy; }
-        if (Math.abs(dx) <= 6 && Math.abs(dy) <= 6 && n > sn) { sn = n; sx = dx; sy = dy; }
-      }
-      if (sn >= bn * 0.85) { bn = sn; bx = sx; by = sy; }
-      if (bn < P.length * 0.15) continue;                  // どうずらしても重ならない隅（物がなくなった等）は使わない
-      const m = (bn > n0 * 1.3 && bn - n0 >= P.length * 0.08) ? Math.hypot(bx, by) : 0;    // はっきりよく重なるずらし方があるときだけ「ずれ」とみなす
-      cs.push(Math.max(0, 1 - Math.max(0, m - 1.5) / D) * 100);
-    }
-    if (cs.length >= 2) out.corner = Math.min(...cs);
-    return out;
+    const shifts = rgShifts(beforeLines.rg, rgGrad(fL));
+    return { line: lineMatchOn(d, 480 * 0.05, MATCH_D), region: rgScore(shifts, settings.front), shifts };
   }
   function lineMatch() {
     if (!beforeLines) return null;
@@ -1418,7 +1452,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     return { ...best, base };
   }
 
-  if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, matchPercent, prepBeforeLines, lineMatch, liveCheck, combineLive, drawL, get beforeLines() { return beforeLines; }, FW, FH };
+  if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, matchPercent, prepBeforeLines, lineMatch, liveCheck, combineLive, drawL, rgGrad, rgShifts, rgScore, get beforeLines() { return beforeLines; }, FW, FH };
 
   // しきい値を超えた状態がこの時間続いたら撮る（カウントダウンの長さ。設定で 0.3〜1.5秒）
   const holdMs = () => (state === 'before' ? settings.countBefore : settings.countSec) * 1000;
@@ -1487,7 +1521,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   function combineLive(L) {
     const v = [];
     if (L.line != null) v.push(L.line);
-    if (settings.corners && L.corner != null) v.push(L.corner);
+    if (L.region != null) v.push(L.region);
     return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 100;
   }
   setInterval(() => {
@@ -1496,7 +1530,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const live = featFromA();
     let sc = matchPercent(beforeFeat, live);
     if (lineTick++ % 2 === 0) { drawL(video, video.videoWidth, video.videoHeight, dzoom, mirror); lastLive = liveCheck(); }
-    // 動かない線（向き）と四隅（立ち位置）の平均を出し、マスごとの一致度（大きなずれ）と低いほうを使う
+    // 動かない線（向き）と場所ごとのずれ（立ち位置）の平均を出し、マスごとの一致度（大きなずれ）と低いほうを使う
     if (lastLive) sc = Math.min(sc, combineLive(lastLive));
     if (window.__forceScore != null) sc = window.__forceScore;   // テスト用
     matchScore = matchScore === null ? sc : matchScore * 0.6 + sc * 0.4;
@@ -1575,7 +1609,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(false); });
 
   // 設定画面
-  const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setGrid', 'grid'], ['setCorners', 'corners'], ['setLevel', 'level']];
+  const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setGrid', 'grid'], ['setFront', 'front'], ['setLevel', 'level']];
   const showCount = () => {
     $('setCountB').value = settings.countBefore; $('setCountBVal').textContent = settings.countBefore.toFixed(1) + '秒';
   };
