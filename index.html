@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-15">
+<meta name="zengo-version" content="2026.11.13-16">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -136,11 +136,12 @@ body {
       transparent calc(66.667% - .5px), rgba(255,255,255,.45) calc(66.667% - .5px), rgba(255,255,255,.45) calc(66.667% + .5px), transparent calc(66.667% + .5px));
 }
 /* 水平線：左右の短い線は固定、まん中の線が傾きに合わせて回る。水平になると1本につながって黄色になる */
-.level { position: absolute; left: 50%; top: 50%; width: 64%; height: 0; transform: translate(-50%, -50%); }
+.level { position: absolute; left: 0; right: 0; top: 50%; height: 0; }
 .level span { position: absolute; top: -1px; height: 2px; background: rgba(255,255,255,.85); box-shadow: 0 0 2px rgba(0,0,0,.6); }
-.level .lv-l { left: 0; width: 14%; }
-.level .lv-r { right: 0; width: 14%; }
-.level .lv-c { left: 20%; width: 60%; transition: transform .08s linear; }
+/* 左右の線は画面の端から伸ばし、まん中の線とのあいだに少しすき間をあける */
+.level .lv-l { left: 0; width: 20%; }
+.level .lv-r { right: 0; width: 20%; }
+.level .lv-c { left: 24%; width: 52%; transition: transform .08s linear; }
 .level.flat span { background: var(--accent); }
 .level.flat .lv-c { left: 0; width: 100%; }
 .level.flat .lv-l, .level.flat .lv-r { opacity: 0; }
