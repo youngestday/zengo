@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-11">
+<meta name="zengo-version" content="2026.11.13-12">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -98,7 +98,7 @@ body {
   box-shadow: 0 4px 16px rgba(0,0,0,.35);
 }
 /* 自動撮影のカウントダウン：満タンの輪が時計回りに減っていき、なくなったら撮る */
-.count { position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%); z-index: 4; width: 68px; height: 68px; pointer-events: none; }
+.count { position: absolute; left: 50%; top: 82%; transform: translate(-50%, -50%); z-index: 4; width: 68px; height: 68px; pointer-events: none; }
 .count svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .count circle { fill: rgba(0,0,0,.45); stroke-width: 6; }
 .count .bg { stroke: rgba(255,255,255,.25); }
@@ -143,17 +143,19 @@ body {
 .level.flat span { background: var(--accent); }
 .level.flat .lv-c { left: 0; width: 100%; }
 .level.flat .lv-l, .level.flat .lv-r { opacity: 0; }
-/* 前後の傾き：丸が上下に動く。スマホがまっすぐ立つ（垂直）と線の上に乗って黄色になる */
-.level .lv-dot {
-  position: absolute; left: 50%; top: 0; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
-  border: 2px solid rgba(255,255,255,.9); box-shadow: 0 0 2px rgba(0,0,0,.6); transition: transform .08s linear;
+/* 前後の傾き：グリッドのまん中のマスに、スマホの形の角丸の枠。
+   カメラが上を向くと上が広い台形、下を向くと下が広い台形になり、まっすぐ立つと長方形で黄色になる */
+.phone-frame {
+  position: absolute; left: 50%; top: 50%; width: 22%; height: 26%;
+  border: 2px solid rgba(255,255,255,.9); border-radius: 12px; box-shadow: 0 0 3px rgba(0,0,0,.5);
+  transform: translate(-50%, -50%) perspective(160px) rotateX(var(--px, 0deg)); transition: transform .08s linear;
 }
-.level.upright .lv-dot { background: var(--accent); border-color: var(--accent); }
-.level .lv-tip {
-  position: absolute; left: 50%; top: 74px; transform: translateX(-50%); white-space: nowrap;
+.phone-frame.upright { border-color: var(--accent); border-width: 3px; }
+.lv-tip {
+  position: absolute; left: 50%; top: 66%; transform: translateX(-50%); white-space: nowrap;
   font-size: 11px; font-weight: 700; color: #fff; background: rgba(0,0,0,.55); padding: 2px 8px; border-radius: 99px;
 }
-.level .lv-tip.ok { background: var(--accent); color: #111; }
+.lv-tip.ok { background: var(--accent); color: #111; }
 .sheet-back { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; }
 .sheet {
   width: min(420px, 100%); max-height: 100%; overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
@@ -246,6 +248,7 @@ body {
   .res > * { width: 100%; }
 }
 .invis { visibility: hidden; }
+.force-vis { visibility: visible; }
 @media (orientation: landscape) { .gear { top: auto; bottom: 8px; } }
 .group { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
 button, .btn {
@@ -295,10 +298,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
         <div class="match" id="tilt" hidden></div>
       </div>
       <div class="pita" id="pita" hidden>ピタッ！</div>
-      <div class="count" id="count" hidden aria-live="polite">
-        <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="bg" cx="32" cy="32" r="27"></circle><circle class="fg" id="countArc" cx="32" cy="32" r="27"></circle></svg>
-        <span id="countText">1.5</span>
-      </div>
+
       <div class="guide" id="guide" hidden></div>
       <div class="flash" id="flashR"></div>
     </div>
@@ -316,7 +316,13 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 <video id="video" playsinline muted autoplay></video>
 <div class="cam-deco" id="camDeco">
   <div class="grid3" id="grid3"></div>
-  <div class="level" id="level" hidden><span class="lv-l"></span><span class="lv-c" id="levelC"></span><span class="lv-r"></span><i class="lv-dot" id="levelDot"></i><b class="lv-tip" id="levelTip"></b></div>
+<div class="count" id="count" hidden aria-live="polite">
+        <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="bg" cx="32" cy="32" r="27"></circle><circle class="fg" id="countArc" cx="32" cy="32" r="27"></circle></svg>
+        <span id="countText">1.5</span>
+      </div>
+  <div class="level" id="level" hidden><span class="lv-l"></span><span class="lv-c" id="levelC"></span><span class="lv-r"></span></div>
+  <div class="phone-frame" id="phoneFrame" hidden></div>
+  <b class="lv-tip" id="levelTip" hidden></b>
 </div>
 
 <nav class="controls" id="controls">
@@ -710,6 +716,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     // 見えなくする部品も場所は残す（invis）ので、シャッターやボタンの位置が動かない
     $('cap').hidden = isR; $('res').hidden = !isR;
     $('tools').classList.toggle('invis', !isA);
+    $('autoBtn').classList.toggle('force-vis', isB);
     $('opacityWrap').classList.toggle('invis', !isA || !overlayOn);
     $('autoBtn').textContent = autoOn ? '自動撮影ON' : '自動撮影OFF';
     $('autoBtn').classList.toggle('on', autoOn);
@@ -740,6 +747,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   async function go(next) {
     state = next; clearCamError();
+    if (next === 'before') { beforeEnteredAt = performance.now(); holdSince = 0; }
     if (next === 'after') { afterEnteredAt = performance.now(); matchScore = null; holdSince = 0; guide = null; guideOn = false; aligned = false; }
     if (next !== 'after') { $('pita').hidden = true; $('paneR').classList.remove('aligned'); $('tilt').hidden = true; }
     render();
@@ -850,20 +858,22 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (!levelQueued) { levelQueued = true; requestAnimationFrame(() => { levelQueued = false; updateLevel(); }); }
   }
   // 水平線：端末が左に傾く（roll>0）と、本当の水平は画面上で時計回りに傾いて見える。インカメは鏡写しなので逆
-  let levelQueued = false;
+  let levelQueued = false, levelOk = false;
   function updateLevel() {
     const el = $('level');
     const r = tiltNow && tiltNow.roll;
-    if (!settings.level || r == null || state === 'result') { el.hidden = true; return; }
+    if (!settings.level || r == null || state === 'result') { el.hidden = true; $('phoneFrame').hidden = true; $('levelTip').hidden = true; levelOk = false; return; }
     const deg = mirror ? -r : r;
     el.hidden = false;
     const flat = Math.abs(deg) < 1;
     el.classList.toggle('flat', flat);
     $('levelC').style.transform = flat ? '' : 'rotate(' + Math.max(-45, Math.min(45, deg)).toFixed(1) + 'deg)';
-    // 前後の傾き（pitch）：カメラが上を向くと丸は下へ（水平線が下がって見えるのと同じ向き）
+    // 前後の傾き（pitch）：カメラが上を向くと上が広い台形（枠の上側が手前に倒れる）
     const pt = tiltNow.pitch, upright = Math.abs(pt) < 1.5;
-    el.classList.toggle('upright', upright);
-    $('levelDot').style.transform = upright ? '' : 'translateY(' + Math.max(-60, Math.min(60, pt * 3)).toFixed(1) + 'px)';
+    const pf = $('phoneFrame'); pf.hidden = false;
+    pf.classList.toggle('upright', upright);
+    pf.style.setProperty('--px', upright ? '0deg' : (Math.max(-55, Math.min(55, -pt * 3))).toFixed(1) + 'deg');
+    levelOk = upright && flat;
     const tip = $('levelTip');
     if (upright && flat) { tip.textContent = '水平・垂直 OK'; tip.className = 'lv-tip ok'; }
     else if (!upright) { tip.textContent = (pt > 0 ? '↓ 下に向ける ' : '↑ 上に向ける ') + Math.round(Math.abs(pt)) + '°'; tip.className = 'lv-tip'; }
@@ -1131,7 +1141,15 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   // しきい値を超えた状態がこの時間続いたら撮る（カウントダウンの長さ。設定で 0.3〜1.5秒）
   const holdMs = () => settings.countSec * 1000;
-  const GRACE_MS = 1500;   // アフター画面に入った直後は撮らない
+  const GRACE_MS = 1500;   // アフター（ビフォー）画面に入った直後は撮らない
+  let beforeEnteredAt = performance.now();
+  // ビフォーの自動撮影：水平・垂直がそろっている間だけカウントダウンし、なくなったら撮る
+  setInterval(() => {
+    if (state !== 'before' || shooting || document.hidden || window.__freeze) return;
+    const ok = autoOn && settings.level && levelOk && cameraAlive() && performance.now() - beforeEnteredAt > GRACE_MS;
+    if (!ok) { holdSince = 0; return; }
+    if (!holdSince) { holdSince = performance.now(); requestAnimationFrame(countLoop); }
+  }, 100);
   // 一致度が設定値を超えたら「ピタッ」（緑の枠＋表示＋音）。下がったら（5%の余裕を見て）また鳴らせるようにする
   let aligned = false;
   function renderMatch() {
@@ -1205,12 +1223,12 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   const ARC = 2 * Math.PI * 27;
   function countLoop() {
     const el = $('count');
-    if (!holdSince || state !== 'after' || shooting) { el.hidden = true; return; }
+    if (!holdSince || state === 'result' || shooting) { el.hidden = true; return; }
     const H = holdMs(), left = Math.max(0, H - (performance.now() - holdSince));
     el.hidden = false;
     $('countArc').style.strokeDashoffset = String(ARC * (1 - left / H));
     $('countText').textContent = (left / 1000).toFixed(1);
-    if (left <= 0) { el.hidden = true; shootAfter(); return; }
+    if (left <= 0) { el.hidden = true; holdSince = 0; if (state === 'before') shootBefore(); else shootAfter(); return; }
     requestAnimationFrame(countLoop);
   }
 
@@ -1224,15 +1242,20 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   }
 
   // ---------- 操作 ----------
+  async function shootBefore() {
+    if (shooting || state !== 'before') return;
+    const frame = grabFrame();
+    if (!frame) { msg('カメラの準備中です。少し待ってからもう一度押してください'); return; }
+    shooting = true;
+    try {
+      tiltBefore = tiltNow ? { ...tiltNow } : null;   // ビフォーを撮った瞬間の傾きを覚える
+      playShutter(); flash('flashL'); await setBefore(frame);
+    } finally { shooting = false; holdSince = 0; }
+  }
   $('shutter').onclick = async () => {
     askTilt();
     if (state === 'after') return shootAfter();
-    const frame = grabFrame();
-    if (!frame) { msg('カメラの準備中です。少し待ってからもう一度押してください'); return; }
-    if (state === 'before') {
-      tiltBefore = tiltNow ? { ...tiltNow } : null;   // ビフォーを撮った瞬間の傾きを覚える
-      playShutter(); flash('flashL'); await setBefore(frame);
-    }
+    if (state === 'before') return shootBefore();
   };
   // ---------- 新しい版の確認 ----------
   // ホーム画面から開いたアプリは古いページを覚えたままになりやすいので、起動時と画面に戻ったときに確認する
