@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-33">
+<meta name="zengo-version" content="2026.11.13-34">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -224,6 +224,17 @@ body {
   grid-template-areas: "tools tools tools" "b shutter a";
 }
 .res { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; min-height: 72px; }
+/* 文字のデザイン：書体（5種類）と位置（8か所）を選ぶ欄。完成画像を見ながら選べるよう、操作欄の中で切り替える */
+.design { display: grid; gap: 8px; max-width: 520px; margin: 0 auto; }
+.design h3 { margin: 0; font-size: 12px; color: var(--muted); font-weight: 700; }
+.ds-styles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.ds-styles button { min-height: 52px; padding: 4px 2px; flex-direction: column; gap: 3px; font-size: 10px; color: var(--muted); }
+.ds-styles button .pv { font-size: 13px; line-height: 1.1; color: var(--fg); white-space: nowrap; }
+.ds-styles button.on .pv { color: #111; }
+.ds-pos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ds-pos button { min-height: 34px; padding: 4px 2px; font-size: 12px; }
+.ds-foot { display: flex; justify-content: center; }
+.ds-foot button { min-width: 140px; }
 .side { display: contents; }
 .tools { grid-area: tools; display: grid; justify-content: center; gap: 8px; }
 .tool { display: flex; align-items: center; gap: 8px; }
@@ -274,6 +285,8 @@ body {
   .zone-b > * { width: 100%; }
   .res { flex-direction: column; align-content: center; }
   .res > * { width: 100%; }
+  .ds-styles { grid-template-columns: repeat(2, 1fr); }
+  .ds-pos { grid-template-columns: repeat(2, 1fr); }
 }
 .invis { visibility: hidden; }
 .force-vis { visibility: visible; }
@@ -402,9 +415,19 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   <div class="res" id="res" hidden>
     <button class="primary" id="saveBtn">保存・共有</button>
     <label class="check" id="labelWrap"><input type="checkbox" id="labelToggle" checked> 文字を入れる</label>
+    <button id="designBtn" aria-label="BEFORE・AFTERの文字の書体と位置を選ぶ">文字のデザイン</button>
     <button id="ratioBtn2" aria-label="写真の縦横比を切り替える">比率 16:9</button>
     <button id="retakeAfter">アフター撮り直し</button>
     <button class="small" id="newBtn">最初から</button>
+  </div>
+
+  <!-- 文字のデザイン（完成画面） -->
+  <div class="design" id="design" hidden>
+    <h3>書体</h3>
+    <div class="ds-styles" id="dsStyles"></div>
+    <h3>位置</h3>
+    <div class="ds-pos" id="dsPos"></div>
+    <div class="ds-foot"><button class="primary" id="designDone">完了</button></div>
   </div>
 </nav>
 
@@ -696,24 +719,105 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   const toBlob = (c, q = 0.92) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('画像を作れませんでした')), 'image/jpeg', q));
 
+  // ---------- BEFORE・AFTER の文字：書体（5種類）と位置（8か所） ----------
+  // 書体は iPhone に入っているものを使う（電波がなくても保存画像に入る）。ほかの端末では似た書体になる
+  const FONT_SANS = '-apple-system, "Helvetica Neue", Arial, sans-serif';
+  const FONT_MINCHO = '"Hiragino Mincho ProN", "Hiragino Mincho Pro", "Yu Mincho", YuMincho, "Noto Serif JP", "Noto Serif CJK JP", serif';
+  const FONT_DIDOT = 'Didot, "Bodoni 72", "Bodoni MT", "Playfair Display", Georgia, "Times New Roman", serif';
+  const FONT_MODERN = '"Avenir Next", Avenir, Futura, "Century Gothic", "Helvetica Neue", Arial, sans-serif';
+  const FONT_ROUND = '"Hiragino Maru Gothic ProN", "Arial Rounded MT Bold", "M PLUS Rounded 1c", "Rounded Mplus 1c", ' + FONT_SANS;
+  // 文字を1字ずつ、字間をあけて書く（letterSpacing に対応していない端末でも同じ見た目にする）
+  function spacedWidth(g, t, sp) { let w = 0; for (const ch of t) w += g.measureText(ch).width + sp; return w - sp; }
+  function spacedText(g, t, x, y, sp) { for (const ch of t) { g.fillText(ch, x, y); x += g.measureText(ch).width + sp; } }
+  // 各書体：text＝文字、font＝書体、size＝文字の箱の大きさ、draw＝箱の左上 (x, y) から描く。out＝写真の枠の外（白地）に置くとき
+  const LABEL_STYLES = [
+    { key: 'std', name: '標準', pvFont: FONT_SANS, pvWeight: 800,
+      text: (a) => a ? 'AFTER' : 'BEFORE', font: (fs) => `800 ${fs}px ${FONT_SANS}`, sp: 0,
+      box(g, t, fs) { const pad = fs * 0.55; return { w: g.measureText(t).width + pad * 2, h: fs + pad * 1.2 }; },
+      draw(g, t, x, y, b, fs, a) {
+        const pad = fs * 0.55;
+        g.fillStyle = a ? 'rgba(255,210,63,0.95)' : 'rgba(0,0,0,0.6)'; roundRect(g, x, y, b.w, b.h, b.h / 2); g.fill();
+        g.fillStyle = a ? '#111111' : '#ffffff'; g.fillText(t, x + pad, y + b.h / 2 + fs * 0.04);
+      } },
+    { key: 'mincho', name: '明朝', pvFont: FONT_MINCHO, pvWeight: 600,
+      text: (a) => a ? 'After' : 'Before', font: (fs) => `600 ${fs * 1.15}px ${FONT_MINCHO}`, sp: 0.06,
+      box(g, t, fs) { return { w: spacedWidth(g, t, fs * this.sp) + fs * 0.2, h: fs * 1.75 }; },
+      draw(g, t, x, y, b, fs, a, out) {
+        // 写真の上では白い文字にやわらかい影、枠の外では濃い墨色。文字の下に細い線を引く
+        const col = out ? '#222222' : '#ffffff';
+        g.save();
+        if (!out) { g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = fs * 0.35; }
+        g.fillStyle = col; spacedText(g, t, x + fs * 0.1, y + fs * 0.7, fs * this.sp);
+        g.fillRect(x + fs * 0.1, y + fs * 1.42, b.w - fs * 0.2, Math.max(1, fs * 0.045));
+        g.restore();
+      } },
+    { key: 'classic', name: 'クラシック', pvFont: FONT_DIDOT, pvWeight: 400, pvItalic: true,
+      text: (a) => a ? 'After' : 'Before', font: (fs) => `italic 400 ${fs * 1.3}px ${FONT_DIDOT}`, sp: 0,
+      box(g, t, fs) { return { w: g.measureText(t).width + fs * 1.3, h: fs * 1.9 }; },
+      draw(g, t, x, y, b, fs, a, out) {
+        // 白いカード（角は四角）に黒い文字。枠の外ではカードなしで、上下に細い線
+        if (!out) { g.fillStyle = 'rgba(255,255,255,0.88)'; g.fillRect(x, y, b.w, b.h); }
+        g.fillStyle = '#111111'; g.fillText(t, x + fs * 0.65, y + b.h / 2);
+        if (out) { const lw = Math.max(1, fs * 0.04); g.fillRect(x + fs * 0.4, y + fs * 0.1, b.w - fs * 0.8, lw); g.fillRect(x + fs * 0.4, y + b.h - fs * 0.1 - lw, b.w - fs * 0.8, lw); }
+      } },
+    { key: 'modern', name: 'モダン', pvFont: FONT_MODERN, pvWeight: 500,
+      text: (a) => a ? 'AFTER' : 'BEFORE', font: (fs) => `500 ${fs * 0.78}px ${FONT_MODERN}`, sp: 0.32,
+      box(g, t, fs) { return { w: spacedWidth(g, t, fs * this.sp) + fs * 1.4, h: fs * 1.55 }; },
+      draw(g, t, x, y, b, fs, a, out) {
+        // 字間を広くとった細めの文字。ビフォーは黒の四角、アフターは白の四角に黒の縁
+        const lw = Math.max(1, fs * 0.06);
+        g.fillStyle = a ? '#ffffff' : '#111111'; g.fillRect(x, y, b.w, b.h);
+        if (a || out) { g.strokeStyle = '#111111'; g.lineWidth = lw; g.strokeRect(x + lw / 2, y + lw / 2, b.w - lw, b.h - lw); }
+        g.fillStyle = a ? '#111111' : '#ffffff'; spacedText(g, t, x + fs * 0.7, y + b.h / 2 + fs * 0.03, fs * this.sp);
+      } },
+    { key: 'pop', name: 'ポップ', pvFont: FONT_ROUND, pvWeight: 800,
+      text: (a) => a ? 'AFTER!' : 'BEFORE', font: (fs) => `800 ${fs * 1.05}px ${FONT_ROUND}`, sp: 0,
+      box(g, t, fs) { const pad = fs * 0.6; return { w: g.measureText(t).width + pad * 2, h: fs * 1.8 }; },
+      draw(g, t, x, y, b, fs, a) {
+        // 丸い文字のステッカー風。白い縁どりで、少し傾ける。ビフォーは青、アフターはオレンジ
+        g.save(); g.translate(x + b.w / 2, y + b.h / 2); g.rotate((a ? 3 : -3) * Math.PI / 180);
+        const lw = fs * 0.14;
+        g.fillStyle = '#ffffff'; roundRect(g, -b.w / 2 - lw, -b.h / 2 - lw, b.w + lw * 2, b.h + lw * 2, b.h / 2 + lw); g.fill();
+        g.fillStyle = a ? '#ff7a2f' : '#3d7bf2'; roundRect(g, -b.w / 2, -b.h / 2, b.w, b.h, b.h / 2); g.fill();
+        g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.fillText(t, 0, fs * 0.05);
+        g.restore();
+      } },
+  ];
+  const LABEL_POS = [
+    { key: 'tl', name: '左上' }, { key: 'tc', name: '中央上' }, { key: 'tr', name: '右上' }, { key: 'ot', name: '枠の外・上' },
+    { key: 'bl', name: '左下' }, { key: 'bc', name: '中央下' }, { key: 'br', name: '右下' }, { key: 'ob', name: '枠の外・下' },
+  ];
+  let labelStyle = Math.max(0, LABEL_STYLES.findIndex(t => t.key === store.get('labelStyle', 'std')));
+  let labelPos = Math.max(0, LABEL_POS.findIndex(t => t.key === store.get('labelPos', 'tl')));
+  let layout = { top: 0 };   // 完成画像の中で、写真が始まる高さ（枠の外・上に文字を置くとき下がる）
+
   function compose(withLabels) {
     const H = Math.min(beforeCanvas.height, afterCanvas.height);
     const W = Math.round(H * AR);
     const gap = Math.round(W * 0.02);
+    const pos = LABEL_POS[labelPos].key, st = LABEL_STYLES[labelStyle];
+    const fs = Math.round(H * 0.05), m = Math.round(H * 0.03);
+    // 枠の外に置くときは、写真の上か下に白い帯を足して、そこに文字を置く
+    const outside = withLabels && (pos === 'ot' || pos === 'ob');
+    const band = outside ? Math.round(fs * 2.6) : 0, top = pos === 'ot' ? band : 0;
     const c = document.createElement('canvas');
-    c.width = W * 2 + gap; c.height = H;
+    c.width = W * 2 + gap; c.height = H + band;
     const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
-    g.drawImage(beforeCanvas, 0, 0, W, H);
-    g.drawImage(afterCanvas, W + gap, 0, W, H);
+    g.drawImage(beforeCanvas, 0, top, W, H);
+    g.drawImage(afterCanvas, W + gap, top, W, H);
+    layout = { top };
     if (withLabels) {
-      const fs = Math.round(H * 0.05), pad = Math.round(fs * 0.55), m = Math.round(H * 0.03);
-      g.font = `800 ${fs}px -apple-system, "Helvetica Neue", Arial, sans-serif`;
-      g.textBaseline = 'middle';
-      [['BEFORE', 0, 'rgba(0,0,0,0.6)', '#ffffff'], ['AFTER', W + gap, 'rgba(255,210,63,0.95)', '#111111']].forEach(([t, x, bg, fg]) => {
-        const tw = g.measureText(t).width, bw = tw + pad * 2, bh = fs + pad * 1.2, bx = x + m, by = m;
-        g.fillStyle = bg; roundRect(g, bx, by, bw, bh, bh / 2); g.fill();
-        g.fillStyle = fg; g.fillText(t, bx + pad, by + bh / 2 + fs * 0.04);
+      g.font = st.font(fs); g.textBaseline = 'middle';
+      [0, 1].forEach(a => {
+        const t = st.text(a), b = st.box(g, t, fs), px = a ? W + gap : 0;
+        let x, y;
+        if (pos[1] === 'l') x = px + m; else if (pos[1] === 'r') x = px + W - m - b.w; else x = px + (W - b.w) / 2;
+        if (pos === 'ot') y = (band - b.h) / 2;
+        else if (pos === 'ob') y = top + H + (band - b.h) / 2;
+        else if (pos[0] === 't') y = top + m;
+        else y = top + H - m - b.h;
+        g.save(); st.draw(g, t, x, y, b, fs, a, outside); g.restore();
       });
     }
     return c;
@@ -751,7 +855,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     // ボタンには今の状態を書く（オン中は黄色）
 
     // 見えなくする部品も場所は残す（invis）ので、シャッターやボタンの位置が動かない
-    $('cap').hidden = isR; $('res').hidden = !isR;
+    if (!isR) designOpen = false;
+    $('cap').hidden = isR; $('res').hidden = !isR || designOpen; $('design').hidden = !isR || !designOpen;
+    if (isR && designOpen) renderDesign();
     $('tools').classList.toggle('invis', !isA);
     $('autoBtn').classList.toggle('force-vis', isB);
     $('opacityWrap').classList.toggle('invis', !isA || !overlayOn);
@@ -829,7 +935,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const r = $('resultImg').getBoundingClientRect();
     const H = Math.min(beforeCanvas.height, afterCanvas.height), W = Math.round(H * AR), gap = Math.round(W * 0.02);
     const k = r.width / (W * 2 + gap);
-    return { r, w: W * k, h: H * k, gapPx: gap * k };
+    return { r, w: W * k, h: H * k, gapPx: gap * k, top: layout.top * k };
   }
   function ckDraw(cv, src, w, h) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -851,7 +957,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   function ckActivate() {
     if (!ck || state !== 'result' || !beforeCanvas || !afterCanvas) return;
     const G = ckGeom(), el = $('checker');
-    el.style.left = G.r.left + 'px'; el.style.top = G.r.top + 'px'; el.style.width = G.r.width + 'px'; el.style.height = G.r.height + 'px';
+    el.style.left = G.r.left + 'px'; el.style.top = (G.r.top + G.top) + 'px'; el.style.width = G.r.width + 'px'; el.style.height = G.h + 'px';
     ckDraw($('ckBefore'), beforeCanvas, G.w, G.h); ckDraw($('ckAfter'), afterCanvas, G.w, G.h);
     el.classList.toggle('lines', ckMode === 'line');
     $('ckBeforeLines').hidden = ckMode !== 'line';
@@ -1669,6 +1775,38 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('ratioBtn2').onclick = nextRatio;
   applyRatioCss();
   $('labelToggle').onchange = async (e) => { store.set('labels', e.target.checked); await buildResult(); };
+
+  // 文字のデザイン：選ぶとすぐ完成画像に反映する（文字を入れていなければ、選んだときに入れる）
+  let designOpen = false;
+  function renderDesign() {
+    const sb = $('dsStyles'); sb.innerHTML = '';
+    LABEL_STYLES.forEach((st, i) => {
+      const b = document.createElement('button'); b.type = 'button';
+      b.className = i === labelStyle ? 'on' : ''; b.setAttribute('aria-pressed', String(i === labelStyle));
+      const pv = document.createElement('span'); pv.className = 'pv'; pv.textContent = st.text(0);
+      pv.style.fontFamily = st.pvFont; pv.style.fontWeight = st.pvWeight; if (st.pvItalic) pv.style.fontStyle = 'italic';
+      const nm = document.createElement('span'); nm.textContent = st.name;
+      b.append(pv, nm);
+      b.onclick = () => pickDesign(i, null);
+      sb.appendChild(b);
+    });
+    const pb = $('dsPos'); pb.innerHTML = '';
+    LABEL_POS.forEach((p, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = p.name;
+      b.className = i === labelPos ? 'on' : ''; b.setAttribute('aria-pressed', String(i === labelPos));
+      b.onclick = () => pickDesign(null, i);
+      pb.appendChild(b);
+    });
+  }
+  async function pickDesign(si, pi) {
+    if (si != null) { labelStyle = si; store.set('labelStyle', LABEL_STYLES[si].key); }
+    if (pi != null) { labelPos = pi; store.set('labelPos', LABEL_POS[pi].key); }
+    if (!$('labelToggle').checked) { $('labelToggle').checked = true; store.set('labels', true); }
+    renderDesign();
+    await buildResult();
+  }
+  $('designBtn').onclick = () => { designOpen = true; render(); };
+  $('designDone').onclick = () => { designOpen = false; render(); };
 
   $('saveBtn').onclick = async () => {
     if (!resultBlob) return;
