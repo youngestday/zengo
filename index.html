@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-25">
+<meta name="zengo-version" content="2026.11.13-26">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -787,7 +787,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   async function go(next) {
     state = next; clearCamError();
     if (next === 'before') { beforeEnteredAt = performance.now(); holdSince = 0; }
-    if (next === 'after') { afterEnteredAt = performance.now(); matchScore = null; holdSince = 0; guide = null; guideOn = false; aligned = false; }
+    if (next === 'after') { lastLine = null; afterEnteredAt = performance.now(); matchScore = null; holdSince = 0; guide = null; guideOn = false; aligned = false; }
     if (next !== 'after') { $('pita').hidden = true; $('paneR').classList.remove('aligned'); }
     render();
     // 完成画面でもカメラは止めない（撮り直しのたびにカメラを起動し直さないため）
@@ -799,6 +799,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     beforeFull = full;
     beforeCanvas = cropOf(full);
     beforeFeat = features(beforeCanvas, beforeCanvas.width, beforeCanvas.height);
+    prepBeforeLines(beforeCanvas);
     if (beforeURL) URL.revokeObjectURL(beforeURL);
     beforeURL = URL.createObjectURL(await toBlob(full, 0.9));
     $('beforeImg').src = beforeURL; $('overlayImg').src = beforeURL;
@@ -1125,6 +1126,92 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     return { w, h, mask, dir };
   }
 
+  // ---------- 撮影中の一致度：動かない「長くまっすぐな線」がどれだけ合っているか ----------
+  // 壁と天井・床の境目、窓枠、照明の縁などは長くまっすぐ。片付けで動く物の線は短い・曲がっている・大きく動く。
+  function straightLines(E) {
+    const { w, h, mask, dir } = E, n = w * h, out = [], seen = new Uint8Array(n);
+    const minLen = Math.max(w, h) * 0.12, stack = [], comp = [];
+    for (let i = 0; i < n; i++) {
+      if (!mask[i] || seen[i]) continue;
+      // 同じ向きの点だけをつなげる（角で曲がる線は別々の直線に分かれる）
+      stack.length = 0; comp.length = 0; stack.push(i); seen[i] = 1; const dd = dir[i];
+      while (stack.length) {
+        const j = stack.pop(); comp.push(j);
+        const jx = j % w, jy = (j - jx) / w;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const x = jx + dx, y = jy + dy; if (x < 0 || y < 0 || x >= w || y >= h) continue;
+          const k = y * w + x; if (mask[k] && !seen[k] && dir[k] === dd) { seen[k] = 1; stack.push(k); }
+        }
+      }
+      if (comp.length < minLen * 0.7) continue;
+      // まっすぐか（点の広がりの細さ）と長さを調べる
+      let mx = 0, my = 0; for (const j of comp) { mx += j % w; my += (j / w) | 0; } mx /= comp.length; my /= comp.length;
+      let sxx = 0, syy = 0, sxy = 0;
+      for (const j of comp) { const x = j % w - mx, y = ((j / w) | 0) - my; sxx += x * x; syy += y * y; sxy += x * y; }
+      sxx /= comp.length; syy /= comp.length; sxy /= comp.length;
+      const tr = sxx + syy, det = sxx * syy - sxy * sxy, disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
+      const l1 = tr / 2 + disc, l2 = Math.max(0, tr / 2 - disc);
+      const len = Math.sqrt(12 * l1), thick = Math.sqrt(l2);
+      if (len >= minLen && thick < 1.5) out.push(comp.slice());
+    }
+    return out;
+  }
+  // 線からの距離（ピクセル）。2回なぞる簡易な距離の計算
+  function distMap(mask, w, h) {
+    const INF = 1e6, d = new Float32Array(w * h);
+    for (let i = 0; i < d.length; i++) d[i] = mask[i] ? 0 : INF;
+    const a = 1, b = Math.SQRT2;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x; let v = d[i];
+      if (x > 0) v = Math.min(v, d[i - 1] + a);
+      if (y > 0) { v = Math.min(v, d[i - w] + a); if (x > 0) v = Math.min(v, d[i - w - 1] + b); if (x < w - 1) v = Math.min(v, d[i - w + 1] + b); }
+      d[i] = v;
+    }
+    for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x; let v = d[i];
+      if (x < w - 1) v = Math.min(v, d[i + 1] + a);
+      if (y < h - 1) { v = Math.min(v, d[i + w] + a); if (x < w - 1) v = Math.min(v, d[i + w + 1] + b); if (x > 0) v = Math.min(v, d[i + w - 1] + b); }
+      d[i] = v;
+    }
+    return d;
+  }
+  // ビフォー・ライブ映像とも、同じ大きさ（270×480）の作業用キャンバスに切り出して比べる
+  const fL = document.createElement('canvas'); fL.width = 270; fL.height = 480;
+  const gL = fL.getContext('2d', { willReadFrequently: true });
+  function drawL(src, sw, sh, z = 1, flip = false) {
+    const vw = sw / z, vh = sh / z;
+    let cw, ch;
+    if (vw / vh > AR) { ch = vh; cw = vh * AR; } else { cw = vw; ch = vw / AR; }
+    gL.save();
+    if (flip) { gL.translate(fL.width, 0); gL.scale(-1, 1); }
+    gL.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, fL.width, fL.height);
+    gL.restore();
+  }
+  let beforeLines = null;   // { lines, total }（ビフォーの長い直線）
+  function prepBeforeLines(bc) {
+    drawL(bc, bc.width, bc.height);
+    const E = buildLineMask(fL, 480, 0.02, 0.3);
+    const lines = straightLines(E);
+    beforeLines = { lines, total: lines.reduce((t, l) => t + l.length, 0) };
+  }
+  // 0〜100。ビフォーの長い直線が、今の映像の同じ位置に何ピクセルずれて見つかるか。
+  // 近くに見つからない線（動いた・なくなった物）は外すが、見つかった割合が少ないときは点数を下げる（大きくずれているため）。
+  // ビフォーに長い直線が少ないときは null（そのときはマスごとの一致度を使う）
+  function lineMatch() {
+    if (!beforeLines || beforeLines.total < 60) return null;
+    const E = buildLineMask(fL, 480, 0.02, 0.3), d = distMap(E.mask, E.w, E.h);
+    const R = 480 * 0.04, D = 480 * 0.012;
+    let credit = 0, found = 0;
+    for (const ln of beforeLines.lines) {
+      const ds = ln.map(i => d[i]).sort((p, q) => p - q), md = ds[ds.length >> 1];
+      if (md > R) continue;
+      credit += ln.length * Math.max(0, 1 - Math.max(0, md - 1) / D); found += ln.length;
+    }
+    if (!found) return 0;
+    const coverage = found / beforeLines.total;
+    return (credit / found) * Math.min(1, coverage / 0.6) * 100;
+  }
+
   function dilate(m, w, h, r) {
     const out = new Uint8Array(w * h);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -1299,7 +1386,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     return { ...best, base };
   }
 
-  if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, matchPercent, FW, FH };
+  if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, matchPercent, prepBeforeLines, lineMatch, drawL, get beforeLines() { return beforeLines; }, FW, FH };
 
   // しきい値を超えた状態がこの時間続いたら撮る（カウントダウンの長さ。設定で 0.3〜1.5秒）
   const holdMs = () => (state === 'before' ? settings.countBefore : settings.countSec) * 1000;
@@ -1354,12 +1441,15 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     el.innerHTML = items.join('');
   }
 
-  let tick = 0;
+  let tick = 0, lineTick = 0, lastLine = null;
   setInterval(() => {
     if (state !== 'after' || !beforeFeat || !stream || !video.videoWidth || shooting || document.hidden || window.__freeze) return;
     drawA(video, video.videoWidth, video.videoHeight, dzoom, mirror);
     const live = featFromA();
-    const sc = matchPercent(beforeFeat, live);
+    let sc = matchPercent(beforeFeat, live);
+    if (lineTick++ % 2 === 0) { drawL(video, video.videoWidth, video.videoHeight, dzoom, mirror); lastLine = lineMatch(); }
+    // 動かない線で測れるときは、マスごとの一致度と低いほうを使う（大きなずれはマス、小さなずれは線で見抜く）
+    if (lastLine != null) sc = Math.min(sc, lastLine);
     matchScore = matchScore === null ? sc : matchScore * 0.6 + sc * 0.4;
     // ガイドは 2回に1回（約0.3秒ごと）。直前の結果となめらかにつなぐ
     if (guideOn && tick++ % 2 === 0) {
@@ -1375,6 +1465,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     renderMatch();
     const now = performance.now();
     if (!autoOn || now - afterEnteredAt < GRACE_MS || matchScore < threshold) { holdSince = 0; return; }
+    // ビフォーをまっすぐ（水平・垂直）で撮っていたら、アフターも水平・垂直がそろっているときだけ撮る
+    const beforeUpright = tiltBefore && Math.abs(tiltBefore.pitch) < 2 && tiltBefore.roll != null && Math.abs(tiltBefore.roll) < 1.5;
+    if (beforeUpright && settings.level && !levelOk) { holdSince = 0; return; }
     if (!holdSince) { holdSince = now; requestAnimationFrame(countLoop); }
   }, 150);
 
@@ -1482,7 +1575,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   function applyRatioCss() { document.documentElement.style.setProperty('--pair', String(AR * 2)); }
   async function setRatio(idx) {
     ratioIdx = idx; AR = RATIOS[idx].ar; store.set('ratio', RATIOS[idx].key); applyRatioCss();
-    if (beforeFull) { beforeCanvas = cropOf(beforeFull); beforeFeat = features(beforeCanvas, beforeCanvas.width, beforeCanvas.height); }
+    if (beforeFull) { beforeCanvas = cropOf(beforeFull); beforeFeat = features(beforeCanvas, beforeCanvas.width, beforeCanvas.height); prepBeforeLines(beforeCanvas); }
     if (afterFull) afterCanvas = cropOf(afterFull);
     matchScore = null; guide = null; holdSince = 0;
     render();
