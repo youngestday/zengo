@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-6">
+<meta name="zengo-version" content="2026.11.13-7">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -134,6 +134,9 @@ body {
 .sheet .row span { display: grid; gap: 2px; }
 .sheet .row small { color: var(--muted); font-size: 12px; }
 .sheet .row input { width: 24px; height: 24px; accent-color: var(--accent); flex: none; }
+.sheet .sec { display: grid; gap: 2px; justify-items: end; flex: none; width: 130px; }
+.sheet .sec input { width: 100%; height: auto; accent-color: var(--accent); }
+.sheet .sec output { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .sheet .note { color: var(--muted); font-size: 12px; margin: 4px 0; }
 .placeholder {
   position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px;
@@ -175,7 +178,11 @@ body {
 .half-btn { width: 50px; height: 34px; min-height: 34px; padding: 0 4px; font-size: 12px; font-weight: 700; gap: 3px; white-space: nowrap; }
 .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); flex: none; }
 .zone-a { grid-area: a; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.ratio-btn { width: 96px; height: 34px; min-height: 34px; padding: 0; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.zone-a-row { display: flex; gap: 4px; }
+.front-btn { width: 54px; height: 34px; min-height: 34px; padding: 0; font-size: 11px; font-weight: 700; }
+.front-btn.on { background: var(--accent); color: #111; border-color: var(--accent); }
+.lens button { min-width: 40px !important; padding: 6px 8px; }
+.ratio-btn { width: 76px; height: 34px; min-height: 34px; padding: 0; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .zone-b { grid-area: b; display: grid; gap: 6px; justify-items: center; }
 .shutter-cell { grid-area: shutter; }
 @media (orientation: landscape) {
@@ -194,7 +201,9 @@ body {
   .tool { flex-direction: column; gap: 6px; }
   .tint-btn { width: 104px; }
   .side { grid-area: side; display: flex; flex-direction: column; gap: 8px; align-self: start; width: 100%; align-items: center; }
-  .zone-a { flex-direction: row; justify-content: center; }
+  .zone-a { flex-direction: row; justify-content: center; flex-wrap: wrap; }
+  .zone-b { grid-template-columns: 1fr 1fr; }
+  .zone-b > * { min-height: 46px; font-size: 12px; }
   .zone-b { align-self: start; width: 100%; }
   .zone-b > * { width: 100%; }
   .res { flex-direction: column; align-content: center; }
@@ -298,7 +307,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <div class="side">
     <div class="zone-a">
       <div class="group lens" id="lens" aria-label="レンズ"></div>
-      <button class="ratio-btn" id="ratioBtn" aria-label="写真の縦横比を切り替える">比率 16:9</button>
+      <div class="zone-a-row">
+        <button class="ratio-btn" id="ratioBtn" aria-label="写真の縦横比を切り替える">比率 16:9</button>
+        <button class="front-btn" id="frontBtn" aria-pressed="false" aria-label="インカメと背面カメラを切り替える">インカメ</button>
+      </div>
     </div>
     <div class="zone-b">
       <label class="btn" id="pickBtn">
@@ -326,6 +338,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <h2 id="sheetTitle">設定</h2>
     <label class="row"><span><b>ピタッの音</b><small>ビフォーと合ったときに「ピッピッ」と鳴らす</small></span><input type="checkbox" id="setPing"></label>
     <label class="row"><span><b>シャッター音</b><small>撮影したときに「カシャ」と鳴らす</small></span><input type="checkbox" id="setShutter"></label>
+    <div class="row"><span><b>自動撮影までの時間</b><small>合ってから撮影するまでの待ち時間（輪が減る時間）</small></span>
+      <span class="sec"><input type="range" id="setCount" min="0.3" max="1.5" step="0.1" value="1"><output id="setCountVal">1.0秒</output></span></div>
     <label class="row"><span><b>傾きセンサー</b><small>ビフォーを撮ったときのスマホの傾きと比べて表示する</small></span><input type="checkbox" id="setTilt"></label>
     <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。<br>傾きは、このアプリのカメラでビフォーを撮ったときだけ比べられます（写真から選んだビフォーには傾きの記録がありません）。</p>
     <p class="note">版：<span id="verText"></span>　<button class="small" id="checkUpdate" type="button">新しい版を確認</button></p>
@@ -373,7 +387,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     { key: 'none',  name: 'なし', css: 'transparent',            line: [255, 255, 255] },
   ];
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
-  const settings = { ping: store.get('setPing', true), shutterSound: store.get('setShutter', true), tilt: store.get('setTilt', true) };
+  const settings = { ping: store.get('setPing', true), shutterSound: store.get('setShutter', true), tilt: store.get('setTilt', true),
+    countSec: Math.round(snap(store.get('setCount', 1), 0.3, 1.5, 0.1, 1) * 10) / 10 };
   let lineMode = store.get('lineMode', true);   // true：線で重ねる／false：写真を薄く重ねる
   let lineMask = null, lineURL = null, lineColorKey = null;
   let guide = null;
@@ -390,9 +405,15 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   }
 
   // ---------- カメラ ----------
+  // レンズの選択肢：背面は 0.5x（超広角）／1x／2x（1xの映像を中央2倍に切り出す）、インカメは 1x／2x
+  // 望遠（3x・5x）は、ボタンが並びきらないので出していない
+  let frontCam = null;        // インカメ（前面カメラ）
+  let facing = store.get('facing', 'back');   // 'back' | 'user'
+  let dzoom = 1;              // 画面の中で拡大する倍率（2x のとき 2）
+  let mirror = false;         // インカメのときは鏡のように左右反転して表示・保存する
   function classify(label, i) {
     const l = (label || '').toLowerCase();
-    if (/前面|front|user/.test(l)) return null;
+    if (/前面|front|user|facetime/.test(l)) return { key: 'front', name: 'イン', front: true };
     if (/超広角|ultra ?wide/.test(l)) return { key: 'uw', name: '0.5x' };
     if (/デュアル|トリプル|dual|triple/.test(l)) return null;
     if (/望遠|telephoto/.test(l)) return { key: 'tele', name: '望遠' };
@@ -405,11 +426,15 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const out = [], seen = {};
     devs.forEach((d, i) => {
       const c = classify(d.label, i); if (!c) return;
+      if (c.front) { if (!frontCam) frontCam = { id: d.deviceId }; return; }
+      if (c.key === 'tele') return;
       if (seen[c.key]) { seen[c.key]++; c.key += seen[c.key]; c.name += '-' + seen[c.key]; } else seen[c.key] = 1;
-      out.push({ id: d.deviceId, ...c });
+      out.push({ id: d.deviceId, zoom: 1, ...c });
     });
-    const order = { uw: 0, wide: 1, tele: 2 };
+    const order = { uw: 0, wide: 1 };
     out.sort((a, b) => (order[a.key] ?? 9) - (order[b.key] ?? 9));
+    const base = out.find(c => c.key === 'wide') || out.find(c => c.key !== 'uw') || out[0];
+    if (base) out.splice(out.indexOf(base) + 1, 0, { id: base.id, key: 'x2', name: '2x', zoom: 2 });
     return out;
   }
 
@@ -428,11 +453,35 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     try { await video.play(); } catch {}
   }
 
+  // 今のレンズの選択肢（背面かインカメか）
+  function lensOptions() {
+    if (facing === 'user') {
+      if (!frontCam) return [];
+      return [{ id: frontCam.id, key: 'f1', name: '1x', zoom: 1, front: true }, { id: frontCam.id, key: 'f2', name: '2x', zoom: 2, front: true }];
+    }
+    return cams;
+  }
+  function curLens() { return lensOptions().find(c => c.key === (facing === 'user' ? frontKey : lensKey)); }
+  let frontKey = store.get('frontLens', 'f1');
+  function applyView() {
+    const L = curLens();
+    dzoom = L ? L.zoom : 1;
+    mirror = facing === 'user';
+    video.style.transform = (mirror ? 'scaleX(-1) ' : '') + (dzoom !== 1 ? 'scale(' + dzoom + ')' : '');
+  }
+
   async function startCamera() {
     if (starting) return starting;
     starting = (async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error(location.protocol === 'https:' ? 'このブラウザはカメラに対応していません' : 'https のページで開いてください');
+      }
+      if (facing === 'user') {
+        // インカメ：IDがわかっていればそれで、なければ「前面」を指定して開く
+        await open(frontCam ? { deviceId: { exact: frontCam.id } } : { facingMode: { exact: 'user' } });
+        if (!cams.length) cams = await listCams();
+        applyView(); renderLens();
+        return;
       }
       // 前回使ったレンズのIDで直接開き、カメラの起動を1回で済ませる（起動のたびにブラウザの通知が出るため）
       const want = cams.find(c => c.key === lensKey);
@@ -453,7 +502,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
         if (pref) lensKey = pref.key;
       }
       store.set('camId', (cams.find(c => c.key === lensKey) || {}).id || stream.getVideoTracks()[0]?.getSettings().deviceId || null);
-      renderLens();
+      applyView(); renderLens();
     })().catch(err => {
       stopCamera();
       const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
@@ -478,18 +527,34 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   function renderLens() {
     const box = $('lens'); box.innerHTML = '';
-    if (cams.length < 2 || state === 'result') return;
-    cams.forEach(c => {
+    $('frontBtn').classList.toggle('on', facing === 'user');
+    $('frontBtn').setAttribute('aria-pressed', String(facing === 'user'));
+    const opts = lensOptions();
+    if (opts.length < 2 || state === 'result') return;
+    const curKey = facing === 'user' ? frontKey : lensKey;
+    opts.forEach(c => {
       const b = document.createElement('button');
-      b.textContent = c.name; b.className = c.key === lensKey ? 'on' : '';
-      b.setAttribute('aria-pressed', c.key === lensKey);
+      b.textContent = c.name; b.className = c.key === curKey ? 'on' : '';
+      b.setAttribute('aria-pressed', c.key === curKey);
       b.onclick = async () => {
-        if (c.key === lensKey && stream) return;
-        lensKey = c.key; store.set('lens', lensKey); renderLens();
+        if (c.key === curKey && stream) return;
+        const prev = curLens();
+        if (facing === 'user') { frontKey = c.key; store.set('frontLens', frontKey); }
+        else { lensKey = c.key; store.set('lens', lensKey); }
+        // 同じカメラで倍率だけ変えるときは、カメラを開き直さない（Chromeの通知を出さないため）
+        if (prev && prev.id === c.id && cameraAlive()) { applyView(); renderLens(); return; }
+        renderLens();
         await startCamera();
       };
       box.appendChild(b);
     });
+  }
+  // インカメ⇔背面カメラの切り替え
+  async function toggleFront() {
+    facing = facing === 'user' ? 'back' : 'user'; store.set('facing', facing);
+    stopCamera(); renderLens();
+    await startCamera();
+    if (facing === 'user' && !cameraAlive()) { facing = 'back'; store.set('facing', facing); msg('インカメを起動できませんでした'); await startCamera(); }
   }
 
   // ---------- 画像処理 ----------
@@ -506,19 +571,22 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   }
 
   // 切り抜かずに、長い辺を MAX_H までに縮めて取っておく
-  function fullCanvas(src, sw, sh) {
-    const s = Math.min(1, MAX_H / Math.max(sw, sh));
+  // z：中央を z 倍に切り出す（2x 用）／flip：左右反転（インカメ用）
+  function fullCanvas(src, sw, sh, z = 1, flip = false) {
+    const cw = sw / z, ch = sh / z, sx = (sw - cw) / 2, sy = (sh - ch) / 2;
+    const s = Math.min(1, MAX_H / Math.max(cw, ch));
     const c = document.createElement('canvas');
-    c.width = Math.round(sw * s); c.height = Math.round(sh * s);
+    c.width = Math.round(cw * s); c.height = Math.round(ch * s);
     const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
-    g.drawImage(src, 0, 0, c.width, c.height);
+    if (flip) { g.translate(c.width, 0); g.scale(-1, 1); }
+    g.drawImage(src, sx, sy, cw, ch, 0, 0, c.width, c.height);
     return c;
   }
   const cropOf = (c) => cropCover(c, c.width, c.height);
 
   function grabFrame() {
     if (!stream || !video.videoWidth) return null;
-    return fullCanvas(video, video.videoWidth, video.videoHeight);
+    return fullCanvas(video, video.videoWidth, video.videoHeight, dzoom, mirror);
   }
 
   async function loadFile(file) {
@@ -715,7 +783,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const ux = -Math.sin(g) * Math.cos(b), uy = Math.sin(b), uz = Math.cos(g) * Math.cos(b);   // 端末から見た「上」
     const th = screenAngle() * Math.PI / 180;
     const sx = ux * Math.cos(th) - uy * Math.sin(th), sy = ux * Math.sin(th) + uy * Math.cos(th);
-    const pitch = Math.asin(Math.max(-1, Math.min(1, -uz))) * 180 / Math.PI;
+    // 背面カメラは画面の裏側（-z）、インカメは表側（+z）を向いている
+    const pitch = Math.asin(Math.max(-1, Math.min(1, facing === 'user' ? uz : -uz))) * 180 / Math.PI;
     const roll = Math.hypot(sx, sy) > 0.3 ? Math.atan2(sx, sy) * 180 / Math.PI : null;
     if (!tiltNow) tiltNow = { pitch, roll };
     else {
@@ -859,10 +928,14 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   const gA = fA.getContext('2d'), gB = fB.getContext('2d', { willReadFrequently: true });
 
   // 映像を 9:16 に切り抜いて作業用キャンバスへ
-  function drawA(src, sw, sh) {
+  function drawA(src, sw, sh, z = 1, flip = false) {
+    const vw = sw / z, vh = sh / z;
     let cw, ch;
-    if (sw / sh > AR) { ch = sh; cw = sh * AR; } else { cw = sw; ch = sw / AR; }
+    if (vw / vh > AR) { ch = vh; cw = vh * AR; } else { cw = vw; ch = vw / AR; }
+    gA.save();
+    if (flip) { gA.translate(fA.width, 0); gA.scale(-1, 1); }
     gA.drawImage(src, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, fA.width, fA.height);
+    gA.restore();
   }
   // 作業用キャンバスを（拡大・回転して）縮め、特徴を取り出す
   function featFromA(scale = 1, deg = 0) {
@@ -977,7 +1050,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, matchPercent, FW, FH };
 
-  const HOLD_MS = 1500;    // しきい値を超えた状態がこの時間続いたら撮る（カウントダウンの長さ）
+  // しきい値を超えた状態がこの時間続いたら撮る（カウントダウンの長さ。設定で 0.3〜1.5秒）
+  const holdMs = () => settings.countSec * 1000;
   const GRACE_MS = 1500;   // アフター画面に入った直後は撮らない
   // 一致度が設定値を超えたら「ピタッ」（緑の枠＋表示＋音）。下がったら（5%の余裕を見て）また鳴らせるようにする
   let aligned = false;
@@ -1025,7 +1099,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   let tick = 0;
   setInterval(() => {
     if (state !== 'after' || !beforeFeat || !stream || !video.videoWidth || shooting || document.hidden || window.__freeze) return;
-    drawA(video, video.videoWidth, video.videoHeight);
+    drawA(video, video.videoWidth, video.videoHeight, dzoom, mirror);
     const live = featFromA();
     const sc = matchPercent(beforeFeat, live);
     matchScore = matchScore === null ? sc : matchScore * 0.6 + sc * 0.4;
@@ -1053,9 +1127,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   function countLoop() {
     const el = $('count');
     if (!holdSince || state !== 'after' || shooting) { el.hidden = true; return; }
-    const left = Math.max(0, HOLD_MS - (performance.now() - holdSince));
+    const H = holdMs(), left = Math.max(0, H - (performance.now() - holdSince));
     el.hidden = false;
-    $('countArc').style.strokeDashoffset = String(ARC * (1 - left / HOLD_MS));
+    $('countArc').style.strokeDashoffset = String(ARC * (1 - left / H));
     $('countText').textContent = (left / 1000).toFixed(1);
     if (left <= 0) { el.hidden = true; shootAfter(); return; }
     requestAnimationFrame(countLoop);
@@ -1102,7 +1176,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   // 設定画面
   const SET = [['setPing', 'ping'], ['setShutter', 'shutterSound'], ['setTilt', 'tilt']];
-  $('gearBtn').onclick = () => { SET.forEach(([id, k]) => $(id).checked = settings[k]); $('sheet').hidden = false; $('sheetClose').focus(); };
+  const showCount = () => { $('setCount').value = settings.countSec; $('setCountVal').textContent = settings.countSec.toFixed(1) + '秒'; };
+  $('setCount').oninput = (e) => { settings.countSec = Math.round(snap(e.target.value, 0.3, 1.5, 0.1, 1) * 10) / 10; store.set('setCount', settings.countSec); showCount(); };
+  $('gearBtn').onclick = () => { SET.forEach(([id, k]) => $(id).checked = settings[k]); showCount(); $('sheet').hidden = false; $('sheetClose').focus(); };
   SET.forEach(([id, k]) => $(id).onchange = (e) => {
     settings[k] = e.target.checked; store.set(id, settings[k]);
     if (k === 'tilt' && settings.tilt) askTilt();
@@ -1150,6 +1226,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   }
   const nextRatio = () => setRatio((ratioIdx + 1) % RATIOS.length);
   $('ratioBtn').onclick = nextRatio;
+  $('frontBtn').onclick = toggleFront;
   $('ratioBtn2').onclick = nextRatio;
   applyRatioCss();
   $('labelToggle').onchange = async (e) => { store.set('labels', e.target.checked); await buildResult(); };
