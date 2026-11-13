@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-14">
+<meta name="zengo-version" content="2026.11.13-15">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -745,6 +745,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('pickLabel').textContent = isB ? 'ビフォーを写真から選ぶ' : 'アフターを写真から選ぶ';
     $('redoBefore').classList.toggle('invis', !isA);
     renderLens();
+    updateLevel();
   }
 
   async function go(next) {
@@ -864,7 +865,15 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   function updateLevel() {
     const el = $('level');
     const r = tiltNow && tiltNow.roll;
-    if (!settings.level || r == null || state === 'result') { el.hidden = true; $('phoneFrame').hidden = true; $('levelTip').hidden = true; levelOk = false; return; }
+    if (!settings.level || r == null || state === 'result') {
+      el.hidden = true; $('phoneFrame').hidden = true; levelOk = false;
+      // センサーがまだ動いていない（iPhoneは最初のタップで許可が要る）ときは、そのことを知らせる
+      const tip = $('levelTip');
+      if (settings.level && !tiltNow && state !== 'result' && window.DeviceOrientationEvent) {
+        tip.textContent = '画面をタップすると水平・垂直ガイドが出ます'; tip.className = 'lv-tip'; tip.hidden = false;
+      } else tip.hidden = true;
+      return;
+    }
     const deg = mirror ? -r : r;
     el.hidden = false;
     const flat = Math.abs(deg) < 1;
@@ -886,12 +895,20 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   document.addEventListener('click', () => askTilt(), { capture: true });
   function askTilt() {
     if (!(settings.tilt || settings.level) || tiltListening) return;
+    if (tiltNow) { tiltListening = true; return; }   // すでに動いている
     const start = () => { window.addEventListener('deviceorientation', onOrient); tiltListening = true; };
     const D = window.DeviceOrientationEvent;
     if (D && typeof D.requestPermission === 'function') {
       if (tiltAsked) return; tiltAsked = true;
       D.requestPermission().then(r => { if (r === 'granted') start(); }).catch(() => {});
     } else if (D) start();
+  }
+  // 起動時：前に許可していれば、タップを待たずにセンサーが動く（動かなければ最初のタップで許可を求める）
+  if ((settings.tilt || settings.level) && window.DeviceOrientationEvent) {
+    window.addEventListener('deviceorientation', onOrient);
+    const D = window.DeviceOrientationEvent;
+    if (typeof D.requestPermission === 'function') D.requestPermission().then(r => { if (r === 'granted') tiltListening = true; }).catch(() => {});
+    else tiltListening = true;
   }
   function renderTilt() {
     const el = $('tilt');
