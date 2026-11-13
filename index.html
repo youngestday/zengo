@@ -48,6 +48,8 @@ body {
 }
 .pane .overlay { pointer-events: none; }
 /* 重ねたビフォーは色を40%かけて、ライブ映像と見分けやすくする（保存画像には入らない） */
+/* 線モード：ビフォーの輪郭だけを線にして重ねる */
+.overlay #overlayLines { image-rendering: auto; }
 .overlay img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .overlay .tint { position: absolute; inset: 0; background: var(--tint, rgba(255, 30, 30, 0.4)); }
 /* 構図合わせのガイド */
@@ -109,6 +111,9 @@ body {
 .tool { display: flex; align-items: center; gap: 8px; }
 .tint-btn { width: 76px; height: 34px; min-height: 34px; padding: 0 6px; flex: none; font-size: 12px; font-weight: 700; gap: 5px; }
 .tint-btn.on { background: var(--accent); color: #111; border-color: var(--accent); }
+.tint-btn.wide { width: 104px; }
+.btn-pair { display: flex; gap: 4px; width: 104px; flex: none; }
+.half-btn { width: 50px; height: 34px; min-height: 34px; padding: 0 4px; font-size: 12px; font-weight: 700; gap: 3px; white-space: nowrap; }
 .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); flex: none; }
 .zone-a { grid-area: a; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .ratio-btn { width: 96px; height: 34px; min-height: 34px; padding: 0; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -157,7 +162,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   width: 72px; height: 72px; border-radius: 50%; padding: 0; background: #fff;
   border: 4px solid var(--bg); box-shadow: 0 0 0 3px #fff; flex: none;
 }
-.slider { display: grid; gap: 2px; font-size: 11px; color: var(--muted); text-align: center; width: 140px; }
+.slider { display: grid; gap: 2px; font-size: 11px; color: var(--muted); text-align: center; width: 128px; }
 @media (orientation: landscape) { .slider { width: 104px; } }
 .slider input { width: 100%; accent-color: var(--accent); }
 .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
@@ -178,7 +183,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <div class="pane" id="paneR">
       <span class="tag" id="tagR">AFTER</span>
       <div class="placeholder" id="phR"><b>アフター</b>先に左側でビフォーを撮るか、<br>写真から選んでください</div>
-      <div class="overlay" id="overlay" hidden><img id="overlayImg" alt=""><span class="tint"></span></div>
+      <div class="overlay" id="overlay" hidden><img id="overlayImg" alt=""><span class="tint" id="overlayTint"></span><img id="overlayLines" alt="" hidden></div>
       <div class="match" id="match" hidden>一致 --%</div>
       <div class="guide" id="guide" hidden></div>
       <div class="flash" id="flashR"></div>
@@ -205,7 +210,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
           <label for="opacity">重ねる濃さ <span id="opacityVal">40%</span></label>
           <input type="range" id="opacity" min="10" max="90" step="10" value="40">
         </div>
-        <button class="tint-btn" id="tintBtn" aria-label="重ねる色を切り替える"><span class="swatch" id="tintSwatch"></span><span id="tintName">赤</span></button>
+        <div class="btn-pair" id="overlayOpts">
+          <button class="half-btn" id="modeBtn" aria-label="重ね方を切り替える（写真／線）">線</button>
+          <button class="half-btn" id="tintBtn" aria-label="重ねる色を切り替える"><span class="swatch" id="tintSwatch"></span><span id="tintName">赤</span></button>
+        </div>
       </div>
       <div class="tool">
         <button class="overlay-btn" id="autoBtn" aria-pressed="false">自動OFF</button>
@@ -213,7 +221,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
           <label for="threshold">一致 <span id="thresholdVal">80%</span> で撮る</label>
           <input type="range" id="threshold" min="50" max="90" step="5" value="80">
         </div>
-        <button class="tint-btn" id="guideBtn" aria-pressed="false">ガイドOFF</button>
+        <button class="tint-btn wide" id="guideBtn" aria-pressed="false">ガイドOFF</button>
       </div>
     </div>
     <div class="shutter-cell"><button class="shutter" id="shutter" aria-label="撮影"></button></div>
@@ -276,12 +284,14 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   let msgTimer = null;
   let autoOn = store.get('autoOn', false);
   const TINTS = [
-    { key: 'red',   name: '赤', css: 'rgba(255, 30, 30, 0.4)' },
-    { key: 'blue',  name: '青', css: 'rgba(30, 110, 255, 0.4)' },
-    { key: 'green', name: '緑', css: 'rgba(30, 220, 70, 0.4)' },
-    { key: 'none',  name: 'なし', css: 'transparent' },
+    { key: 'red',   name: '赤', css: 'rgba(255, 30, 30, 0.4)',  line: [255, 50, 50] },
+    { key: 'blue',  name: '青', css: 'rgba(30, 110, 255, 0.4)', line: [60, 150, 255] },
+    { key: 'green', name: '緑', css: 'rgba(30, 220, 70, 0.4)',  line: [40, 235, 90] },
+    { key: 'none',  name: 'なし', css: 'transparent',            line: [255, 255, 255] },
   ];
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
+  let lineMode = store.get('lineMode', true);   // true：線で重ねる／false：写真を薄く重ねる
+  let lineMask = null, lineURL = null, lineColorKey = null;
   let guide = null;
   let guideOn = false;   // 最初はガイドなしで合わせ、最後の微調整で使う想定。アフター画面に入るたびにOFFから始める
   let threshold = snap(store.get('threshold', 80), 50, 90, 5, 80);
@@ -501,7 +511,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('overlay').style.setProperty('--tint', tint.css);
     $('tintName').textContent = tint.name;
     $('tintSwatch').style.background = tint.key === 'none' ? 'transparent' : tint.css.replace(/0\.4\)$/, '1)');
-    $('tintBtn').classList.toggle('invis', !isA || !overlayOn);
+    $('overlayOpts').classList.toggle('invis', !isA || !overlayOn);
+    $('modeBtn').textContent = lineMode ? '線' : '写真';
+    $('overlayImg').hidden = lineMode; $('overlayTint').hidden = lineMode;
+    $('overlayLines').hidden = !lineMode;
+    if (lineMode && isA && overlayOn) ensureLines();
     $('ratioBtn').textContent = '比率 ' + RATIOS[ratioIdx].name;
     $('ratioBtn2').textContent = '比率 ' + RATIOS[ratioIdx].name;
     $('guideBtn').textContent = guideOn ? 'ガイドON' : 'ガイドOFF';
@@ -531,6 +545,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (beforeURL) URL.revokeObjectURL(beforeURL);
     beforeURL = URL.createObjectURL(await toBlob(full, 0.9));
     $('beforeImg').src = beforeURL; $('overlayImg').src = beforeURL;
+    lineMask = null; lineColorKey = null; $('overlayLines').removeAttribute('src');
     await go('after');
   }
 
@@ -548,6 +563,108 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     resultURL = URL.createObjectURL(resultBlob);
     $('resultImg').src = resultURL;
   }
+
+  // ---------- 線モード：ビフォーの輪郭（テーブルや冷蔵庫の縁など）だけを取り出す ----------
+  // 白黒にしてぼかし → 輪郭の強さと向き → 線を細くする → 強い線から弱い線へたどる → 短い線は捨てる
+  function buildLineMask(src) {
+    const L = 720, s = Math.min(1, L / Math.max(src.width, src.height));
+    const w = Math.round(src.width * s), h = Math.round(src.height * s), n = w * h;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(src, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data;
+    let a = new Float32Array(n), b = new Float32Array(n);
+    for (let i = 0; i < n; i++) a[i] = d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+    // ぼかし（1-2-1 を横・縦に2回）で細かい模様を消し、大きな縁だけ残す
+    for (let r = 0; r < 2; r++) {
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = y * w + x, l = x > 0 ? a[i - 1] : a[i], rr = x < w - 1 ? a[i + 1] : a[i];
+        b[i] = (l + 2 * a[i] + rr) / 4;
+      }
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = y * w + x, u = y > 0 ? b[i - w] : b[i], dn = y < h - 1 ? b[i + w] : b[i];
+        a[i] = (u + 2 * b[i] + dn) / 4;
+      }
+    }
+    const mag = new Float32Array(n), dir = new Uint8Array(n);
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const gx = -a[i - w - 1] - 2 * a[i - 1] - a[i + w - 1] + a[i - w + 1] + 2 * a[i + 1] + a[i + w + 1];
+      const gy = -a[i - w - 1] - 2 * a[i - w] - a[i - w + 1] + a[i + w - 1] + 2 * a[i + w] + a[i + w + 1];
+      mag[i] = Math.hypot(gx, gy);
+      let ang = Math.atan2(gy, gx) * 180 / Math.PI; if (ang < 0) ang += 180;
+      dir[i] = ang < 22.5 || ang >= 157.5 ? 0 : ang < 67.5 ? 1 : ang < 112.5 ? 2 : 3;
+    }
+    // 線を1画素の太さにする（輪郭の向きに対して一番強いところだけ残す）
+    const nms = new Float32Array(n), off = [[1, 0], [1, 1], [0, 1], [-1, 1]];
+    const hist = new Uint32Array(512); let cnt = 0, maxM = 1;
+    for (let i = 0; i < n; i++) if (mag[i] > maxM) maxM = mag[i];
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x, m = mag[i]; if (m < 1) continue;
+      const [ox, oy] = off[dir[i]], o = oy * w + ox;
+      if (m >= mag[i + o] && m >= mag[i - o]) { nms[i] = m; hist[Math.min(511, Math.floor(m / maxM * 511))]++; cnt++; }
+    }
+    // 強い線の基準：残った点のうち上位12%
+    let acc = 0, hiBin = 511;
+    for (let k = 511; k >= 0; k--) { acc += hist[k]; if (acc >= cnt * 0.12) { hiBin = k; break; } }
+    const hi = hiBin / 511 * maxM, lo = hi * 0.45;
+    // 強い点から弱い点へつなげてたどり、短い線（長い辺の4%未満）は捨てる
+    const mask = new Uint8Array(n), seen = new Uint8Array(n), minLen = Math.round(Math.max(w, h) * 0.04);
+    const stack = [], comp = [];
+    for (let i = 0; i < n; i++) {
+      if (seen[i] || nms[i] < hi) continue;
+      stack.length = 0; comp.length = 0; stack.push(i); seen[i] = 1;
+      while (stack.length) {
+        const j = stack.pop(); comp.push(j);
+        const jx = j % w, jy = (j - jx) / w;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const x = jx + dx, y = jy + dy; if (x < 0 || y < 0 || x >= w || y >= h) continue;
+          const k = y * w + x; if (!seen[k] && nms[k] >= lo) { seen[k] = 1; stack.push(k); }
+        }
+      }
+      if (comp.length >= minLen) for (const j of comp) mask[j] = 1;
+    }
+    return { w, h, mask };
+  }
+  function dilate(m, w, h, r) {
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      if (!m[y * w + x]) continue;
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < w && yy < h) out[yy * w + xx] = 1;
+      }
+    }
+    return out;
+  }
+  // 線を描く：選んだ色の線＋まわりに薄い黒の縁（明るい場所でも見えるように）
+  async function renderLines() {
+    if (!lineMask) return;
+    const { w, h, mask } = lineMask, tint = TINTS[tintIdx], [R, G, B] = tint.line;
+    const inner = dilate(mask, w, h, 1), outer = dilate(inner, w, h, 1);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'), img = g.createImageData(w, h), px = img.data;
+    for (let i = 0; i < w * h; i++) {
+      if (inner[i]) { px[i * 4] = R; px[i * 4 + 1] = G; px[i * 4 + 2] = B; px[i * 4 + 3] = 255; }
+      else if (outer[i]) { px[i * 4 + 3] = 140; }
+    }
+    g.putImageData(img, 0, 0);
+    const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+    if (lineURL) URL.revokeObjectURL(lineURL);
+    lineURL = URL.createObjectURL(blob);
+    $('overlayLines').src = lineURL;
+    lineColorKey = tint.key;
+  }
+  let lineBusy = false;
+  async function ensureLines() {
+    if (lineBusy || !beforeFull) return;
+    if (lineMask && lineColorKey === TINTS[tintIdx].key) return;
+    lineBusy = true;
+    try {
+      if (!lineMask) { await new Promise(r => setTimeout(r, 0)); lineMask = buildLineMask(beforeFull); }
+      await renderLines();
+    } finally { lineBusy = false; }
+    if (lineColorKey !== TINTS[tintIdx].key) ensureLines();
+  }
+  if (location.hash === '#test') window.__lines = { buildLineMask, get mask() { return lineMask; } };
 
   // ---------- 自動シャッター／ガイド：ビフォーとの構図の一致度 ----------
   // 小さく縮めた白黒画像どうしで、明るさの並び（ZNCC）と輪郭の向き（勾配の相関）を比べる。
@@ -717,6 +834,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (state === 'before') { flash('flashL'); await setBefore(frame); }
   };
   $('guideBtn').onclick = () => { guideOn = !guideOn; guide = null; render(); };
+  $('modeBtn').onclick = () => { lineMode = !lineMode; store.set('lineMode', lineMode); render(); };
   $('tintBtn').onclick = () => { tintIdx = (tintIdx + 1) % TINTS.length; store.set('tint', TINTS[tintIdx].key); render(); };
   $('autoBtn').onclick = () => { autoOn = !autoOn; holdSince = 0; store.set('autoOn', autoOn); render(); };
   $('threshold').oninput = (e) => { threshold = +e.target.value; holdSince = 0; store.set('threshold', threshold); render(); };
