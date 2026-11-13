@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-34">
+<meta name="zengo-version" content="2026.11.13-35">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -1100,8 +1100,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const ux = -Math.sin(g) * Math.cos(b), uy = Math.sin(b), uz = Math.cos(g) * Math.cos(b);   // 端末から見た「上」
     const th = angleFor(ux, uy) * Math.PI / 180;
     const sx = ux * Math.cos(th) - uy * Math.sin(th), sy = ux * Math.sin(th) + uy * Math.cos(th);
-    // 背面カメラは画面の裏側（-z）、インカメは表側（+z）を向いている
-    const pitch = Math.asin(Math.max(-1, Math.min(1, facing === 'user' ? uz : -uz))) * 180 / Math.PI;
+    // 前後の傾きは、インカメのときも背面カメラ（画面の裏側 -z）の向きで測る。
+    // インカメのレンズの向きで測ると上下が逆になり、「上に向ける／下に向ける」とスマホ形の枠が、スマホの動かし方と逆に出てしまうため
+    const pitch = Math.asin(Math.max(-1, Math.min(1, -uz))) * 180 / Math.PI;
     const roll = Math.hypot(sx, sy) > 0.3 ? Math.atan2(sx, sy) * 180 / Math.PI : null;
     if (!tiltNow) tiltNow = { pitch, roll };
     else {
