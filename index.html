@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-4">
+<meta name="zengo-version" content="2026.11.13-5">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -97,9 +97,15 @@ body {
   background: var(--ok); color: #062b12; font-weight: 800; font-size: 18px; padding: 8px 16px; border-radius: 99px; white-space: nowrap;
   box-shadow: 0 4px 16px rgba(0,0,0,.35);
 }
-.pita.pop { animation: pop .35s ease-out; }
-@keyframes pop { from { transform: translate(-50%, -50%) scale(.6); opacity: 0 } to { transform: translate(-50%, -50%) scale(1); opacity: 1 } }
-@media (prefers-reduced-motion: reduce) { .pita.pop { animation: none; } }
+/* 一度ポンと出てから、ふわっと薄くなって30%で残る */
+.pita.pop { animation: pop 1.8s ease-out forwards; }
+@keyframes pop {
+  0%   { transform: translate(-50%, -50%) scale(.6); opacity: 0 }
+  12%  { transform: translate(-50%, -50%) scale(1);  opacity: 1 }
+  45%  { opacity: 1 }
+  100% { transform: translate(-50%, -50%) scale(1);  opacity: .3 }
+}
+@media (prefers-reduced-motion: reduce) { .pita.pop { animation: none; opacity: .3; } }
 .gear {
   position: absolute; z-index: 6; top: 8px; left: 8px;
   min-height: 32px; padding: 4px 10px; font-size: 12px; border-radius: 99px;
@@ -667,13 +673,20 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   function playShutter() {
     if (!settings.shutterSound) return;
     const a = audio(); if (!a) return;
-    // 「カ」「シャ」：短いノイズを2回
-    [[0, 0.035, 3000], [0.06, 0.09, 1800]].forEach(([t0, dur, f]) => {
+    // スマホのカメラに近い、小さく乾いた「カシャ」：ごく短い高めのクリックを2回（2回目を少し長く）
+    const master = a.createGain(); master.gain.value = 0.32; master.connect(a.destination);
+    [[0, 0.014, 5200, 0.7], [0.052, 0.03, 3600, 1.0]].forEach(([t0, dur, f, vol]) => {
       const len = Math.ceil(a.sampleRate * dur), buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
-      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
-      const src = a.createBufferSource(), bp = a.createBiquadFilter(), g = a.createGain();
-      src.buffer = buf; bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 0.8; g.gain.value = 0.9;
-      src.connect(bp).connect(g).connect(a.destination); src.start(a.currentTime + t0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4);
+      const src = a.createBufferSource(), hp = a.createBiquadFilter(), bp = a.createBiquadFilter(), g = a.createGain();
+      src.buffer = buf; hp.type = 'highpass'; hp.frequency.value = 1500;
+      bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 1.4; g.gain.value = vol;
+      src.connect(hp).connect(bp).connect(g).connect(master); src.start(a.currentTime + t0);
+      // 機械の手応え：ごく小さい低い「コッ」
+      const o = a.createOscillator(), og = a.createGain(), t = a.currentTime + t0;
+      o.type = 'sine'; o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.02);
+      og.gain.setValueAtTime(0.25 * vol, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.025);
+      o.connect(og).connect(master); o.start(t); o.stop(t + 0.03);
     });
   }
 
