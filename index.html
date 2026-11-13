@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-27">
+<meta name="zengo-version" content="2026.11.13-28">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -71,8 +71,6 @@ body {
 .guide .g.rotr  { left: 62%; top: 50%; }
 .guide .g.rotl  { left: 38%; top: 50%; }
 .guide .g.mid   { left: 50%; top: 50%; }
-.guide .g.pos   { left: 50%; top: 78%; flex-direction: row; gap: 4px; }
-.guide .g.pos b { font-size: 16px; }
 .guide .g b { font-size: 20px; line-height: 1; color: var(--accent); }
 .guide .g.big b { font-size: 28px; }
 .guide .g.ok { background: var(--ok); color: #062b12; }
@@ -187,7 +185,7 @@ body {
 @media (prefers-reduced-motion: reduce) { .flash.on { animation: none; } }
 
 .result { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 0; }
-.result img { max-width: 100%; max-height: calc(100% - 112px); object-fit: contain; min-height: 0; border-radius: 4px; -webkit-touch-callout: none; touch-action: none; }
+.result img { max-width: 100%; max-height: calc(100% - 70px); object-fit: contain; min-height: 0; border-radius: 4px; -webkit-touch-callout: none; touch-action: none; }
 .result img.checking { opacity: 0; }
 /* 重なりチェックのスライダー（iPhoneの「スライドで電源オフ」のように、右のつまみを左へ滑らせる） */
 .ck-slide {
@@ -203,9 +201,6 @@ body {
   position: absolute; right: 4px; top: 4px; width: 48px; height: 48px; border-radius: 50%;
   display: grid; place-items: center; background: var(--accent); color: #111; box-shadow: 0 2px 8px rgba(0,0,0,.4); cursor: grab;
 }
-.ck-mode { display: flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; flex: none; }
-.ck-mode button { min-height: 32px; padding: 4px 16px; border: 0; border-radius: 0; font-size: 12px; font-weight: 700; color: var(--muted); background: var(--panel); }
-.ck-mode button.on { background: var(--accent); color: #111; }
 .checker #ckBeforeLines { z-index: 4; }
 .checker.lines #ckBefore { z-index: 3; }
 .ck-slide.back .ck-knob, .ck-slide.back .ck-label { transition: transform .22s ease-out, opacity .22s ease-out; }
@@ -343,9 +338,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       <span class="ck-label" id="ckLabel">重なりチェック</span>
       <span class="ck-knob" id="ckKnob"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg></span>
     </div>
-    <div class="ck-mode" role="group" aria-label="重なりチェックの重ね方">
-      <button type="button" id="ckModeLine">線画</button><button type="button" id="ckModePhoto">写真</button>
-    </div>
+
   </div>
 
   <div class="msg" id="msg" hidden></div>
@@ -428,9 +421,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <label class="row"><span><b>ピタッの音</b><small>ビフォーと合ったときに「ピッピッ」と鳴らす</small></span><input type="checkbox" id="setPing"></label>
     <label class="row"><span><b>シャッター音</b><small>撮影したときに「カシャ」と鳴らす</small></span><input type="checkbox" id="setShutter"></label>
     <div class="row"><span><b>ビフォーの自動撮影までの時間</b><small>水平・垂直がそろってから撮るまで。じっくり構えたいときは長めに</small></span>
-      <span class="sec"><input type="range" id="setCountB" min="0.5" max="5" step="0.5" value="2"><output id="setCountBVal">2.0秒</output></span></div>
+      <span class="sec"><input type="range" id="setCountB" min="0.5" max="2" step="0.1" value="1"><output id="setCountBVal">1.0秒</output></span></div>
     <div class="row"><span><b>アフターの自動撮影までの時間</b><small>ビフォーと合ってから撮るまで（輪が減る時間）</small></span>
-      <span class="sec"><input type="range" id="setCount" min="0.3" max="1.5" step="0.1" value="1"><output id="setCountVal">1.0秒</output></span></div>
+      <span class="sec"><input type="range" id="setCount" min="0.3" max="1" step="0.1" value="0.5"><output id="setCountVal">0.5秒</output></span></div>
     <label class="row"><span><b>グリッド</b><small>カメラの上に 3×3 の線を出す</small></span><input type="checkbox" id="setGrid"></label>
     <label class="row"><span><b>四隅（手前）も合わせる</b><small>天井や壁だけでなく、画面の四隅の家具や床の輪郭も一致度に入れる。立ち位置まで合わせられる。手前の家具を動かす片付けではOFFに</small></span><input type="checkbox" id="setCorners"></label>
     <label class="row"><span><b>水平・垂直ガイド</b><small>まん中の線が左右の傾きで回り（水平で黄色の1本に）、下のスマホ形の枠が前後の傾きで台形になる（まっすぐ立つと黄色に）</small></span><input type="checkbox" id="setLevel"></label>
@@ -481,8 +474,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   ];
   let tintIdx = Math.max(0, TINTS.findIndex(t => t.key === store.get('tint', 'red')));
   const settings = { ping: store.get('setPing', true), shutterSound: store.get('setShutter', true), tilt: store.get('setTilt', true),
-    countSec: Math.round(snap(store.get('setCount', 1), 0.3, 1.5, 0.1, 1) * 10) / 10,
-    countBefore: Math.round(snap(store.get('setCountB', 2), 0.5, 5, 0.5, 2) * 10) / 10,
+    // 範囲と初期値を変えたので、保存先の名前も変えて初期値から始める
+    countSec: Math.round(snap(store.get('setCountA2', 0.5), 0.3, 1, 0.1, 0.5) * 10) / 10,
+    countBefore: Math.round(snap(store.get('setCountB2', 1), 0.5, 2, 0.1, 1) * 10) / 10,
     grid: store.get('setGrid', true), level: store.get('setLevel', true), corners: store.get('setCorners', true) };
   const lineMode = true;   // 撮影中はビフォーの輪郭の線だけを重ねる（写真の重ね合わせは完成画面の確認で使う）
   let lineMask = null, lineURL = null, lineColorKey = null;
@@ -842,15 +836,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     cv.style.width = w + 'px'; cv.style.height = h + 'px';
     const g = cv.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, cv.width, cv.height);
   }
-  // 重ね方：線画（ビフォーを線にしてアフターの上に重ねる）／写真（アフターを半透明にして重ねる）
-  let ckMode = store.get('ckMode', 'line');
-  function renderCkMode() {
-    $('ckModeLine').classList.toggle('on', ckMode === 'line'); $('ckModeLine').setAttribute('aria-pressed', String(ckMode === 'line'));
-    $('ckModePhoto').classList.toggle('on', ckMode === 'photo'); $('ckModePhoto').setAttribute('aria-pressed', String(ckMode === 'photo'));
-  }
-  $('ckModeLine').onclick = () => { ckMode = 'line'; store.set('ckMode', ckMode); renderCkMode(); };
-  $('ckModePhoto').onclick = () => { ckMode = 'photo'; store.set('ckMode', ckMode); renderCkMode(); };
-  renderCkMode();
+  // 重なりチェックは線画：ビフォーを線にして、くっきりしたアフターの上に重ねる
+  const ckMode = 'line';
   // ビフォー（比率で切り出したもの）の線画。ビフォー・比率・線の色が変わったら作り直す
   let ckLinesCache = { src: null, tint: null, canvas: null };
   function ckLinesCanvas() {
@@ -1196,76 +1183,68 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const E = buildLineMask(fL, 480, 0.02, 0.3);
     const lines = straightLines(E);
     const { w, h, mask } = E;
-    // 四隅（左上・右上・左下・右下）の輪郭の点と、手前（下側）・奥（上側）の輪郭の点も覚えておく
-    const corners = [[], [], [], []], near = [], far = [];
+    // 四隅（左上・右上・左下・右下）の輪郭の点も覚えておく
+    const corners = [[], [], [], []];
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const i = y * w + x; if (!mask[i]) continue;
       const cx = x < w * 0.35 ? 0 : x >= w * 0.65 ? 1 : -1, cy = y < h * 0.3 ? 0 : y >= h * 0.7 ? 1 : -1;
       if (cx >= 0 && cy >= 0) corners[cy * 2 + cx].push(i);
-      if (y >= h * 0.6 && (x + y) % 2 === 0) near.push(i);
-      if (y < h * 0.4 && (x + y) % 2 === 0) far.push(i);
     }
-    beforeLines = { lines, total: lines.reduce((t, l) => t + l.length, 0), w, h, corners, near, far };
+    beforeLines = { lines, total: lines.reduce((t, l) => t + l.length, 0), w, h, corners };
   }
   // 0〜100。ビフォーの長い直線が、今の映像の同じ位置に何ピクセルずれて見つかるか。
   // 近くに見つからない線（動いた・なくなった物）は外すが、見つかった割合が少ないときは点数を下げる（大きくずれているため）。
   // ビフォーに長い直線が少ないときは null（そのときはマスごとの一致度を使う）
-  // 戻り値 { line, corner, pos }：line＝動かない直線の一致度、corner＝四隅の一致度、
-  // pos＝遠く（上側）に比べて手前（下側）がずれている量（立ち位置のずれ。ピクセル）
-  function liveCheck(wantPos) {
+  // 戻り値 { line, corner }：line＝動かない直線の一致度、corner＝四隅の一致度
+  function liveCheck() {
     if (!beforeLines) return null;
     const E = buildLineMask(fL, 480, 0.02, 0.3), d = distMap(E.mask, E.w, E.h);
-    const R = 480 * 0.04, D = 480 * 0.012;
-    const out = { line: lineMatchOn(d, R, D), corner: null, pos: null };
-    // 四隅：それぞれの隅で、近くに見つかった輪郭がどれだけぴったりの位置にあるか（直線と同じ採点）。
-    // 遠くに離れた輪郭（片付けでなくなった物）は数えない。一番合っていない隅を使う
-    const cs = [];
-    for (const P of beforeLines.corners) {
-      let a = 0, b = 0;
-      for (const i of P) { const v = d[i]; if (v <= R) { b++; a += Math.max(0, 1 - Math.max(0, v - 1) / D); } }
-      if (b >= 15) cs.push(a / b * 100);
+    const R = 480 * 0.05, D = MATCH_D;
+    const out = { line: lineMatchOn(d, R, D), corner: null };
+    // 四隅：それぞれの隅の輪郭を少しずつずらして、一番よく重なるずらし方を探す。
+    // ずらさない（0,0）のが一番なら合っている。ずらしたほうがはっきりよく重なるなら、その分ずれている。
+    // 片付けでなくなった物の輪郭は、どうずらしても重ならないので判定に影響しない
+    const cs = [], { w, h } = beforeLines;
+    const hit = (P, dx, dy) => { let n = 0; for (const i of P) { const x = i % w + dx, y = ((i / w) | 0) + dy; if (x >= 0 && y >= 0 && x < w && y < h && d[y * w + x] <= 2.5) n++; } return n; };
+    for (const P0 of beforeLines.corners) {
+      if (P0.length < 25) continue;
+      const P = P0.length > 400 ? P0.filter((_, k) => k % Math.ceil(P0.length / 400) === 0) : P0;
+      const n0 = hit(P, 0, 0);
+      // 一番よく重なるずらし方と、小さなずらし方（±6）の中で一番のものを探し、ほぼ同じなら小さいほうを選ぶ
+      // （散らかった物がたまたま重なって、大きなずれと見誤らないように）
+      let bn = n0, bx = 0, by = 0, sn = n0, sx = 0, sy = 0;
+      for (let dy = -20; dy <= 20; dy += 2) for (let dx = -20; dx <= 20; dx += 2) {
+        if (!dx && !dy) continue;
+        const n = hit(P, dx, dy);
+        if (n > bn) { bn = n; bx = dx; by = dy; }
+        if (Math.abs(dx) <= 6 && Math.abs(dy) <= 6 && n > sn) { sn = n; sx = dx; sy = dy; }
+      }
+      if (sn >= bn * 0.85) { bn = sn; bx = sx; by = sy; }
+      if (bn < P.length * 0.15) continue;                  // どうずらしても重ならない隅（物がなくなった等）は使わない
+      const m = (bn > n0 * 1.3 && bn - n0 >= P.length * 0.08) ? Math.hypot(bx, by) : 0;    // はっきりよく重なるずらし方があるときだけ「ずれ」とみなす
+      cs.push(Math.max(0, 1 - Math.max(0, m - 1.5) / D) * 100);
     }
     if (cs.length >= 2) out.corner = Math.min(...cs);
-    // 立ち位置：手前と奥をそれぞれ一番合うところまでずらして比べ、その差を見る
-    if (wantPos && beforeLines.near.length > 40) {
-      const { w, h } = beforeLines;
-      // ずれている輪郭だけを取り出し、それがどれだけずらすと合うか（合う点の数が一番多いずらし方）を探す
-      const best = (P0) => {
-        const P = P0.filter(i => d[i] > 2.5 && d[i] <= R * 1.6);
-        if (P.length < 30 || P.length < P0.length * 0.15) return [0, 0];
-        let bx = 0, by = 0, bn = 0;
-        for (let dy = -24; dy <= 24; dy += 2) for (let dx = -30; dx <= 30; dx += 2) {
-          let n = 0;
-          for (const i of P) {
-            const x = i % w + dx, y = ((i / w) | 0) + dy; if (x < 0 || y < 0 || x >= w || y >= h) continue;
-            if (d[y * w + x] <= 1.5) n++;
-          }
-          if (n > bn) { bn = n; bx = dx; by = dy; }
-        }
-        return bn >= P.length * 0.35 ? [bx, by] : [0, 0];
-      };
-      // 奥（上側）に輪郭が少ないときは、奥は合っているものとみなす
-      const [nx, ny] = best(beforeLines.near), [fx, fy] = beforeLines.far.length > 20 ? best(beforeLines.far) : [0, 0];
-      out.pos = { dx: nx - fx, dy: ny - fy };
-    }
     return out;
   }
   function lineMatch() {
     if (!beforeLines) return null;
     const E = buildLineMask(fL, 480, 0.02, 0.3), d = distMap(E.mask, E.w, E.h);
-    return lineMatchOn(d, 480 * 0.04, 480 * 0.012);
+    return lineMatchOn(d, 480 * 0.05, MATCH_D);
   }
+  // ずれの採点：1.5ピクセルまでは満点、そこから MATCH_D ピクセルずれると0点（480ピクセルの高さに対して約4%）
+  const MATCH_D = 480 * 0.04;
   function lineMatchOn(d, R, D) {
     if (!beforeLines || beforeLines.total < 60) return null;
     let credit = 0, found = 0;
     for (const ln of beforeLines.lines) {
       const ds = ln.map(i => d[i]).sort((p, q) => p - q), md = ds[ds.length >> 1];
       if (md > R) continue;
-      credit += ln.length * Math.max(0, 1 - Math.max(0, md - 1) / D); found += ln.length;
+      credit += ln.length * Math.max(0, 1 - Math.max(0, md - 1.5) / D); found += ln.length;
     }
     if (!found) return 0;
     const coverage = found / beforeLines.total;
-    return (credit / found) * Math.min(1, coverage / 0.6) * 100;
+    return (credit / found) * Math.min(1, coverage / 0.5) * 100;
   }
 
   function dilate(m, w, h, r) {
@@ -1442,7 +1421,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     return { ...best, base };
   }
 
-  if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, matchPercent, prepBeforeLines, lineMatch, liveCheck, drawL, get beforeLines() { return beforeLines; }, FW, FH };
+  if (location.hash === '#test') window.__z = { drawA, featFromA, estimate, similarity, matchPercent, prepBeforeLines, lineMatch, liveCheck, combineLive, drawL, get beforeLines() { return beforeLines; }, FW, FH };
 
   // しきい値を超えた状態がこの時間続いたら撮る（カウントダウンの長さ。設定で 0.3〜1.5秒）
   const holdMs = () => (state === 'before' ? settings.countBefore : settings.countSec) * 1000;
@@ -1491,37 +1470,25 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const zs = Math.abs(Math.log(guide.scale)) * 100;                                    // 大きさの違い（%）
     const lz = lvl(zs, 5, 12);
     if (lz) add(guide.scale > 1 ? '⇡' : '⇣', guide.scale > 1 ? '前へ' : '後ろへ', lz, guide.scale > 1 ? 'fwd' : 'back');
-    const la = lvl(Math.abs(guide.deg), 2.5, 6);
-    if (la) add(guide.deg > 0 ? '↺' : '↻', (guide.deg > 0 ? '左に<br>傾ける ' : '右に<br>傾ける ') + Math.round(Math.abs(guide.deg)) + '°', la, guide.deg > 0 ? 'rotl' : 'rotr');
-    // 立ち位置：遠くは合っているのに手前だけずれているとき（向きではなく、立つ場所の違い）
-    // 手前が右にずれて見える＝カメラが左にずれている → 右へ動く。手前が下にずれて見える＝カメラが高い → 低く
-    const P = lastLive && lastLive.pos;
-    if (settings.corners && P) {
-      const hx = Math.abs(P.dx) >= 6, hy = Math.abs(P.dy) >= 6;
-      if (hx || hy) {
-        const t = [];
-        if (hx) t.push(P.dx > 0 ? '→ 右へ' : '← 左へ');
-        if (hy) t.push(P.dy > 0 ? '↓ 低く' : '↑ 高く');
-        add('👣', '立ち位置 ' + t.join('・'), Math.max(Math.abs(P.dx), Math.abs(P.dy)) >= 12 ? 2 : 1, 'pos');
-      }
-    }
-    if (!items.length && $('pita').hidden) add('◎', 'ぴったり', 1, 'ok mid');
+    // ガイドは 上へ・下へ・左へ・右へ・前へ・後ろへ の6つだけ（傾きは水平・垂直ガイドで合わせる）
     el.innerHTML = items.join('');
   }
 
   let tick = 0, lineTick = 0, lastLive = null;
+  function combineLive(L) {
+    const v = [];
+    if (L.line != null) v.push(L.line);
+    if (settings.corners && L.corner != null) v.push(L.corner);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 100;
+  }
   setInterval(() => {
     if (state !== 'after' || !beforeFeat || !stream || !video.videoWidth || shooting || document.hidden || window.__freeze) return;
     drawA(video, video.videoWidth, video.videoHeight, dzoom, mirror);
     const live = featFromA();
     let sc = matchPercent(beforeFeat, live);
-    if (lineTick++ % 2 === 0) { drawL(video, video.videoWidth, video.videoHeight, dzoom, mirror); lastLive = liveCheck(guideOn); }
-    // 動かない線・四隅で測れるときは、マスごとの一致度と一番低いものを使う
-    // （大きなずれはマス、向きのずれは長い直線、立ち位置のずれは四隅で見抜く）
-    if (lastLive) {
-      if (lastLive.line != null) sc = Math.min(sc, lastLive.line);
-      if (settings.corners && lastLive.corner != null) sc = Math.min(sc, lastLive.corner);
-    }
+    if (lineTick++ % 2 === 0) { drawL(video, video.videoWidth, video.videoHeight, dzoom, mirror); lastLive = liveCheck(); }
+    // 動かない線（向き）と四隅（立ち位置）の平均を出し、マスごとの一致度（大きなずれ）と低いほうを使う
+    if (lastLive) sc = Math.min(sc, combineLive(lastLive));
     matchScore = matchScore === null ? sc : matchScore * 0.6 + sc * 0.4;
     // ガイドは 2回に1回（約0.3秒ごと）。直前の結果となめらかにつなぐ
     if (guideOn && tick++ % 2 === 0) {
@@ -1606,8 +1573,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('setCount').value = settings.countSec; $('setCountVal').textContent = settings.countSec.toFixed(1) + '秒';
     $('setCountB').value = settings.countBefore; $('setCountBVal').textContent = settings.countBefore.toFixed(1) + '秒';
   };
-  $('setCountB').oninput = (e) => { settings.countBefore = Math.round(snap(e.target.value, 0.5, 5, 0.5, 2) * 10) / 10; store.set('setCountB', settings.countBefore); showCount(); };
-  $('setCount').oninput = (e) => { settings.countSec = Math.round(snap(e.target.value, 0.3, 1.5, 0.1, 1) * 10) / 10; store.set('setCount', settings.countSec); showCount(); };
+  $('setCountB').oninput = (e) => { settings.countBefore = Math.round(snap(e.target.value, 0.5, 2, 0.1, 1) * 10) / 10; store.set('setCountB2', settings.countBefore); showCount(); };
+  $('setCount').oninput = (e) => { settings.countSec = Math.round(snap(e.target.value, 0.3, 1, 0.1, 0.5) * 10) / 10; store.set('setCountA2', settings.countSec); showCount(); };
   $('gearBtn').onclick = () => { SET.forEach(([id, k]) => $(id).checked = settings[k]); showCount(); $('sheet').hidden = false; $('sheetClose').focus(); };
   SET.forEach(([id, k]) => $(id).onchange = (e) => {
     settings[k] = e.target.checked; store.set(id, settings[k]);
