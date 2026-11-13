@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-12">
+<meta name="zengo-version" content="2026.11.13-13">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -98,7 +98,14 @@ body {
   box-shadow: 0 4px 16px rgba(0,0,0,.35);
 }
 /* 自動撮影のカウントダウン：満タンの輪が時計回りに減っていき、なくなったら撮る */
-.count { position: absolute; left: 50%; top: 82%; transform: translate(-50%, -50%); z-index: 4; width: 68px; height: 68px; pointer-events: none; }
+.count { position: absolute; left: 50%; top: 89%; transform: translate(-50%, -50%); z-index: 4; width: 56px; height: 56px; pointer-events: none; }
+/* ビフォーとの傾きの差：グリッドの下段まん中のマスに小さく出す */
+.tiltc {
+  position: absolute; left: 50%; top: 78%; transform: translate(-50%, -50%); z-index: 3; pointer-events: none;
+  font-size: 11px; font-weight: 700; line-height: 1.3; text-align: center; white-space: pre-line;
+  padding: 3px 8px; border-radius: 10px; background: rgba(0,0,0,.55); color: #fff; font-variant-numeric: tabular-nums;
+}
+.tiltc.ok { background: var(--ok); color: #062b12; }
 .count svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .count circle { fill: rgba(0,0,0,.45); stroke-width: 6; }
 .count .bg { stroke: rgba(255,255,255,.25); }
@@ -152,7 +159,7 @@ body {
 }
 .phone-frame.upright { border-color: var(--accent); border-width: 3px; }
 .lv-tip {
-  position: absolute; left: 50%; top: 66%; transform: translateX(-50%); white-space: nowrap;
+  position: absolute; left: 50%; top: 69%; transform: translate(-50%, -50%); white-space: nowrap;
   font-size: 11px; font-weight: 700; color: #fff; background: rgba(0,0,0,.55); padding: 2px 8px; border-radius: 99px;
 }
 .lv-tip.ok { background: var(--accent); color: #111; }
@@ -295,11 +302,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       <div class="overlay" id="overlay" hidden><img id="overlayImg" alt=""><span class="tint" id="overlayTint"></span><img id="overlayLines" alt="" hidden></div>
       <div class="badges">
         <div class="match" id="match" hidden>一致 --%</div>
-        <div class="match" id="tilt" hidden></div>
       </div>
       <div class="pita" id="pita" hidden>ピタッ！</div>
 
       <div class="guide" id="guide" hidden></div>
+      <div class="tiltc" id="tilt" hidden></div>
       <div class="flash" id="flashR"></div>
     </div>
   </div>
@@ -900,7 +907,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (Math.abs(dp) >= 1.5) parts.push((dp > 0 ? '↓ 傾き ' : '↑ 傾き ') + Math.round(Math.abs(dp)) + '° ' + (dp > 0 ? '下へ' : '上へ'));
     if (Math.abs(dr) >= 1.5) parts.push((dr > 0 ? '↻ ' : '↺ ') + Math.round(Math.abs(dr)) + '° ' + (dr > 0 ? '右に回す' : '左に回す'));
     const ok = !parts.length;
-    el.textContent = ok ? '✓ 傾き OK' : parts.join('　');
+    el.textContent = ok ? '✓ 傾き OK' : parts.join('\n');
     el.classList.toggle('ok', ok);
     el.hidden = false;
     return ok;
