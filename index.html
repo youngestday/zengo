@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-7">
+<meta name="zengo-version" content="2026.11.13-8">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -179,9 +179,14 @@ body {
 .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); flex: none; }
 .zone-a { grid-area: a; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .zone-a-row { display: flex; gap: 4px; }
-.front-btn { width: 54px; height: 34px; min-height: 34px; padding: 0; font-size: 11px; font-weight: 700; }
+.front-btn { width: 44px; height: 34px; min-height: 34px; padding: 0; }
 .front-btn.on { background: var(--accent); color: #111; border-color: var(--accent); }
-.lens button { min-width: 40px !important; padding: 6px 8px; }
+/* レンズ：0.5x を上、1x・2x を下に並べた三角形。0.5x のないとき（インカメなど）も場所は空けておく */
+.lens { display: grid; grid-template-columns: 40px 40px; grid-template-areas: "uw uw" "w1 w2"; gap: 4px; justify-content: center; }
+.lens .uw { grid-area: uw; justify-self: center; }
+.lens .w1 { grid-area: w1; }
+.lens .w2 { grid-area: w2; }
+.lens button { width: 40px; min-width: 0; height: 34px; min-height: 34px; padding: 0; border-radius: 99px; font-size: 12px; font-weight: 700; }
 .ratio-btn { width: 76px; height: 34px; min-height: 34px; padding: 0; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .zone-b { grid-area: b; display: grid; gap: 6px; justify-items: center; }
 .shutter-cell { grid-area: shutter; }
@@ -201,7 +206,8 @@ body {
   .tool { flex-direction: column; gap: 6px; }
   .tint-btn { width: 104px; }
   .side { grid-area: side; display: flex; flex-direction: column; gap: 8px; align-self: start; width: 100%; align-items: center; }
-  .zone-a { flex-direction: row; justify-content: center; flex-wrap: wrap; }
+  .zone-a { flex-direction: row; justify-content: center; align-items: center; gap: 8px; }
+  .zone-a-row { flex-direction: column; align-items: center; }
   .zone-b { grid-template-columns: 1fr 1fr; }
   .zone-b > * { min-height: 46px; font-size: 12px; }
   .zone-b { align-self: start; width: 100%; }
@@ -221,7 +227,7 @@ button:focus-visible, .btn:focus-within, input:focus-visible { outline: 2px soli
 button:active, .btn:active { transform: scale(.97); }
 button.on { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 700; }
 button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 700; }
-.lens button { min-width: 48px; border-radius: 99px; font-weight: 700; }
+
 .overlay-btn {
   width: 104px; height: 38px; min-height: 38px; padding: 0; flex: none;
   font-weight: 700; white-space: nowrap; letter-spacing: .02em;
@@ -306,10 +312,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <div class="shutter-cell"><button class="shutter" id="shutter" aria-label="撮影"></button></div>
     <div class="side">
     <div class="zone-a">
-      <div class="group lens" id="lens" aria-label="レンズ"></div>
+      <div class="lens" id="lens" aria-label="レンズ"></div>
       <div class="zone-a-row">
         <button class="ratio-btn" id="ratioBtn" aria-label="写真の縦横比を切り替える">比率 16:9</button>
-        <button class="front-btn" id="frontBtn" aria-pressed="false" aria-label="インカメと背面カメラを切り替える">インカメ</button>
+        <button class="front-btn" id="frontBtn" aria-pressed="false" aria-label="インカメと背面カメラを切り替える" title="インカメ⇔背面カメラ"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><path d="M9 12.2a3.2 3.2 0 0 1 5.6-1.4"/><path d="M14.8 9.4v1.6h-1.6"/><path d="M15 14.8a3.2 3.2 0 0 1-5.6 1.4"/><path d="M9.2 17.6V16h1.6"/></svg></button>
       </div>
     </div>
     <div class="zone-b">
@@ -530,11 +536,22 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('frontBtn').classList.toggle('on', facing === 'user');
     $('frontBtn').setAttribute('aria-pressed', String(facing === 'user'));
     const opts = lensOptions();
-    if (opts.length < 2 || state === 'result') return;
     const curKey = facing === 'user' ? frontKey : lensKey;
-    opts.forEach(c => {
+    // 決まった3つの場所（上：0.5x／左下：1x／右下：2x）に置く。ないものは見えない空きにして、ボタンが動かないようにする
+    const slots = {
+      uw: opts.find(c => c.key === 'uw'),
+      w1: opts.find(c => c.zoom === 1 && c.key !== 'uw'),
+      w2: opts.find(c => c.zoom === 2),
+    };
+    ['uw', 'w1', 'w2'].forEach(slot => {
+      const c = slots[slot];
       const b = document.createElement('button');
-      b.textContent = c.name; b.className = c.key === curKey ? 'on' : '';
+      if (!c || state === 'result') {
+        b.className = slot + ' invis'; b.tabIndex = -1; b.setAttribute('aria-hidden', 'true');
+        b.textContent = slot === 'uw' ? '0.5x' : slot === 'w1' ? '1x' : '2x';
+        box.appendChild(b); return;
+      }
+      b.textContent = slot === 'w1' ? '1x' : c.name; b.className = slot + (c.key === curKey ? ' on' : '');
       b.setAttribute('aria-pressed', c.key === curKey);
       b.onclick = async () => {
         if (c.key === curKey && stream) return;
