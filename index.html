@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.14-4">
+<meta name="zengo-version" content="2026.11.14-5">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -199,6 +199,13 @@ button.danger { background: var(--danger); color: #fff; border-color: var(--dang
 .sheet .sec input { width: 100%; height: auto; accent-color: var(--accent); }
 .sheet .sec output { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .sheet .note { color: var(--muted); font-size: 12px; margin: 4px 0; }
+.upd-card { display: grid; gap: 6px; padding: 10px; border-radius: 12px; border: 1.5px solid var(--accent); background: rgba(255,210,63,.08); }
+.upd-card button { width: 100%; min-height: 46px; font-size: 15px; font-weight: 800; gap: 8px; border-color: var(--accent); color: var(--accent); background: var(--bg); }
+.upd-card button.new { background: var(--accent); color: #111; }
+.upd-status { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.upd-status b { color: var(--fg); font-variant-numeric: tabular-nums; }
+#updStatus.ok { color: var(--ok); font-weight: 700; }
+#updStatus.warn { color: var(--danger); font-weight: 700; }
 .placeholder {
   position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px;
   color: var(--muted); padding: 12px; font-size: 13px;
@@ -503,6 +510,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 <div class="sheet-back" id="sheet" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
     <h2 id="sheetTitle">設定</h2>
+    <!-- 新しい版の確認：いちばん上に大きく出し、結果もここに出す（新しい版があれば、ボタンが「更新する」に変わる） -->
+    <div class="upd-card">
+      <button id="checkUpdate" type="button"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg><span id="checkUpdateText">新しい版を確認</span></button>
+      <div class="upd-status"><span>今の版：<b id="verText"></b></span><span id="updStatus"></span></div>
+    </div>
     <label class="row"><span><b>ピタッの音</b><small>ビフォーと合ったときに「ピッピッ」と鳴らす</small></span><input type="checkbox" id="setPing"></label>
     <label class="row"><span><b>シャッター音</b><small>撮影したときに「カシャ」と鳴らす</small></span><input type="checkbox" id="setShutter"></label>
     <div class="row"><span><b>ビフォーの自動撮影までの時間</b><small>水平・垂直がそろってから撮るまで。じっくり構えたいときは長めに</small></span>
@@ -511,7 +523,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <label class="row"><span><b>手前（画面の下のほう）も合わせる</b><small>奥の壁や天井だけでなく、手前の家具や床も合っているときだけピタッにする。立ち位置まで合わせられる。手前の家具を動かす片付けではOFFに</small></span><input type="checkbox" id="setFront"></label>
     <label class="row"><span><b>水平・垂直ガイド</b><small>まん中の線が左右の傾きで回り（水平で黄色の1本に）、下のスマホ形の枠が前後の傾きで台形になる（まっすぐ立つと黄色に）</small></span><input type="checkbox" id="setLevel"></label>
     <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。</p>
-    <p class="note">版：<span id="verText"></span>　<button class="small" id="checkUpdate" type="button">新しい版を確認</button></p>
     <button class="primary" id="sheetClose">閉じる</button>
   </div>
 </div>
@@ -1833,18 +1844,28 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   // ホーム画面から開いたアプリは古いページを覚えたままになりやすいので、起動時と画面に戻ったときに確認する
   const myVer = document.querySelector('meta[name="zengo-version"]').content;
   $('verText').textContent = myVer;
+  let newerVer = null;
+  const doUpdate = () => { location.replace(location.pathname + '?v=' + Date.now()); };
+  function showUpd(text, cls) { const el = $('updStatus'); el.textContent = text; el.className = cls || ''; }
   async function checkUpdate(showResult) {
+    if (showResult) { showUpd('確認しています…'); $('checkUpdate').disabled = true; }
     try {
       const r = await fetch(location.pathname + '?check=' + Date.now(), { cache: 'no-store' });
       const t = await r.text();
       const m = t.match(/name="zengo-version" content="([^"]+)"/);
-      if (m && m[1] !== myVer) { $('update').hidden = false; return true; }
-      if (showResult) msg('最新の版です（' + myVer + '）');
-    } catch { if (showResult) msg('確認できませんでした。電波のよい場所でもう一度お試しください'); }
+      if (m && m[1] !== myVer) {
+        newerVer = m[1]; $('update').hidden = false;
+        $('checkUpdate').classList.add('new'); $('checkUpdateText').textContent = '新しい版に更新する';
+        showUpd('新しい版があります（' + m[1] + '）', 'ok');
+        return true;
+      }
+      if (showResult) showUpd('最新の版です', 'ok');
+    } catch { if (showResult) showUpd('確認できませんでした。電波のよい場所でもう一度', 'warn'); }
+    finally { $('checkUpdate').disabled = false; }
     return false;
   }
-  $('updateBtn').onclick = () => { location.replace(location.pathname + '?v=' + Date.now()); };
-  $('checkUpdate').onclick = () => checkUpdate(true);
+  $('updateBtn').onclick = doUpdate;
+  $('checkUpdate').onclick = () => newerVer ? doUpdate() : checkUpdate(true);
   checkUpdate(false);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(false); });
 
