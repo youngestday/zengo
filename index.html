@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.14-5">
+<meta name="zengo-version" content="2026.11.14-6">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -520,7 +520,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <div class="row"><span><b>ビフォーの自動撮影までの時間</b><small>水平・垂直がそろってから撮るまで。じっくり構えたいときは長めに</small></span>
       <span class="sec"><input type="range" id="setCountB" min="0.5" max="2" step="0.1" value="1"><output id="setCountBVal">1.0秒</output></span></div>
     <label class="row"><span><b>グリッド</b><small>カメラの上に 3×3 の線を出す</small></span><input type="checkbox" id="setGrid"></label>
-    <label class="row"><span><b>手前（画面の下のほう）も合わせる</b><small>奥の壁や天井だけでなく、手前の家具や床も合っているときだけピタッにする。立ち位置まで合わせられる。手前の家具を動かす片付けではOFFに</small></span><input type="checkbox" id="setFront"></label>
+    <label class="row"><span><b>手前（画面の下のほう）も合わせる</b><small>奥の壁や天井だけでなく、手前の家具や床も合っているときだけピタッにする。立ち位置まで合わせられる。手前の物を動かしたり、なくしたりするときはOFFに</small></span><input type="checkbox" id="setFront"></label>
     <label class="row"><span><b>水平・垂直ガイド</b><small>まん中の線が左右の傾きで回り（水平で黄色の1本に）、下のスマホ形の枠が前後の傾きで台形になる（まっすぐ立つと黄色に）</small></span><input type="checkbox" id="setLevel"></label>
     <p class="note">マナーモード（消音）のときは、音が鳴らないことがあります。</p>
     <button class="primary" id="sheetClose">閉じる</button>
