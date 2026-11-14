@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.14-6">
+<meta name="zengo-version" content="2026.11.14-7">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -38,7 +38,9 @@ body {
 [hidden] { display: none !important; }
 
 /* ステージ */
-.stage { position: relative; container-type: size; min-width: 0; min-height: 0; display: grid; place-items: center; padding: 8px; }
+.stage { position: relative; container-type: size; min-width: 0; min-height: 0; display: grid; place-items: center; padding: 48px 8px 8px; }
+/* 左上のボタン（設定・保存した写真・写真から作る）の分だけ上をあけ、写真に重ならないようにする。横持ちではボタンが左下なので下をあける */
+@media (orientation: landscape) { .stage { padding: 8px 8px 48px; } }
 .pair {
   width: min(100cqw, calc(100cqh * var(--pair, 1.125))); aspect-ratio: var(--pair, 1.125); max-width: 100%;
   display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
@@ -353,6 +355,20 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .btn input[type=file] { display: none; }
 .small { font-size: 12px; padding: 6px 8px; min-height: 32px; color: var(--muted); }
+/* 縦持ち：シャッターの左右を、同じ幅（130px）・同じ高さの2段にそろえる
+   左：写真から選ぶ／撮り直す　右：0.5x・1x／比率・カメラ切り替え */
+@media (orientation: portrait) {
+  .zone-b { grid-template-rows: 44px 36px; gap: 6px; width: 130px; justify-self: center; }
+  .zone-b > * { width: 130px; margin: 0; }
+  #pickBtn { height: 44px; min-height: 44px; padding: 2px 6px; font-size: 12px; line-height: 1.25; }
+  #redoBefore { height: 36px; min-height: 36px; padding: 0 6px; }
+  .zone-a { display: grid; grid-template-rows: 44px 36px; gap: 6px; width: 130px; justify-self: center; }
+  .lens { grid-template-columns: 62px 62px; gap: 6px; }
+  .lens button { width: 62px; height: 44px; min-height: 44px; font-size: 13px; }
+  .zone-a-row { gap: 6px; }
+  .ratio-btn { width: 88px; height: 36px; min-height: 36px; }
+  .front-btn { width: 36px; height: 36px; min-height: 36px; }
+}
 </style>
 </head>
 <body>
@@ -2229,6 +2245,25 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   });
 
   try { navigator.wakeLock?.request('screen').catch(() => {}); } catch {}
+
+  // 向きを変えたら、操作欄をいったん作り直す。iPhone の Safari は、横→縦に戻したときに
+  // 並べ方の切り替えをしくじり、ボタンが大きく崩れたまま残ることがあるため
+  let lastPortrait = innerHeight >= innerWidth, relayoutTimer = null;
+  function relayout() {
+    const el = $('controls');
+    el.style.display = 'none'; void el.offsetHeight; el.style.display = '';
+    placeZones(); sizeSlider(); updateLevel();
+  }
+  function onTurn() {
+    const portrait = innerHeight >= innerWidth;
+    if (portrait === lastPortrait) return;
+    lastPortrait = portrait;
+    requestAnimationFrame(relayout);
+    clearTimeout(relayoutTimer); relayoutTimer = setTimeout(relayout, 350);   // iPhone は向きの変わり目で画面の大きさが少し遅れて決まる
+  }
+  window.addEventListener('resize', onTurn);
+  window.addEventListener('orientationchange', () => setTimeout(onTurn, 50));
+  screen.orientation?.addEventListener?.('change', onTurn);
 
   render();
   startCamera();
