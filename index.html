@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.14-8">
+<meta name="zengo-version" content="2026.11.14-9">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -368,6 +368,12 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   .zone-a-row { gap: 6px; }
   .ratio-btn { width: 88px; height: 36px; min-height: 36px; }
   .front-btn { width: 36px; height: 36px; min-height: 36px; }
+  /* 上の段（線・ガイド／自動撮影）の左右の端を、下の段（写真から選ぶ／0.5x・1x）の端にそろえる */
+  .tools { justify-content: stretch; }
+  .tool { display: grid; grid-template-columns: 104px 1fr 104px; gap: 8px; padding: 0 2.5px; align-items: center; }
+  .tool > :first-child { justify-self: start; }
+  .tool > :last-child { justify-self: end; }
+  .tool > .slider { justify-self: center; }
 }
 </style>
 </head>
@@ -440,15 +446,16 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
           <label for="opacity">線の濃さ <span id="opacityVal">40%</span></label>
           <input type="range" id="opacity" min="10" max="90" step="10" value="40">
         </div>
-        <span class="tint-btn wide invis" aria-hidden="true"></span>
+        <span class="overlay-btn invis" aria-hidden="true"></span>
       </div>
       <div class="tool">
-        <button class="overlay-btn" id="autoBtn" aria-pressed="false">自動撮影OFF</button>
+        <!-- 左：ガイド（線のボタンの下）／右：自動撮影（0.5x・1x の上） -->
+        <button class="overlay-btn" id="guideBtn" aria-pressed="false">ガイドOFF</button>
         <div class="slider" id="thresholdWrap">
           <label for="threshold">一致 <span id="thresholdVal">80%</span> <span id="thresholdWord">でピタッ</span></label>
           <input type="range" id="threshold" min="50" max="90" step="5" value="80">
         </div>
-        <button class="tint-btn wide" id="guideBtn" aria-pressed="false">ガイドOFF</button>
+        <button class="overlay-btn" id="autoBtn" aria-pressed="false">自動撮影OFF</button>
       </div>
     </div>
     <div class="shutter-cell"><button class="shutter" id="shutter" aria-label="撮影"></button></div>
@@ -478,7 +485,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <button id="designBtn" aria-label="BEFORE・AFTERの文字の書体と位置を選ぶ">文字のデザイン</button>
     <button id="ratioBtn2" aria-label="写真の縦横比を切り替える">比率 16:9</button>
     <button id="retakeAfter">アフター撮り直し</button>
-    <button class="small" id="swapBtn" aria-label="ビフォーとアフターを左右入れ替える">左右入れ替え</button>
     <button class="small" id="newBtn">最初から</button>
   </div>
 
@@ -2223,15 +2229,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const file = e.target.files && e.target.files[0]; e.target.value = '';
     if (!file) return;
     withLoading(async () => { const c = await loadFile(file); afterFull = c; afterCanvas = cropOf(c); imagesDirty = true; await buildResult(); render(); });
-  };
-  // 完成画面：ビフォーとアフターを左右入れ替える
-  $('swapBtn').onclick = async () => {
-    const b = beforeFull, a = afterFull;
-    if (!b && !a) return;
-    tiltBefore = null;
-    if (a) await prepareBefore(a, { analyze: false }); else { beforeFull = beforeCanvas = beforeFeat = beforeLines = null; }
-    afterFull = b; afterCanvas = b ? cropOf(b) : null; imagesDirty = true;
-    await buildResult(); render();
   };
 
   function cameraAlive() {
