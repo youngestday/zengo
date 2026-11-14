@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.14-2">
+<meta name="zengo-version" content="2026.11.14-3">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -120,14 +120,29 @@ body {
   min-height: 32px; padding: 4px 10px; font-size: 12px; border-radius: 99px;
   background: rgba(24,25,27,.85);
 }
-#keepBtn { width: 150px; padding: 4px 6px; white-space: nowrap; }
+#keepBtn, #makeBtn { width: 112px; padding: 4px 6px; white-space: nowrap; }
 /* 保存したビフォーの一覧 */
-.kept { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.kept .item { position: relative; display: grid; gap: 2px; justify-items: center; }
-.kept .item > button.pick { padding: 0; min-height: 0; border-radius: 8px; overflow: hidden; width: 100%; aspect-ratio: 3 / 4; background: #000; }
-.kept .item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.kept { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+.kept.wide { grid-template-columns: repeat(2, 1fr); }
+.kept .item { display: grid; gap: 2px; justify-items: center; cursor: pointer; -webkit-touch-callout: none; }
+.kept .item .frame { position: relative; width: 100%; aspect-ratio: 3 / 4; border-radius: 8px; overflow: hidden; background: #000; border: 3px solid transparent; }
+.kept.wide .item .frame { aspect-ratio: 1; }
+.kept .item img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.kept.wide .item img { object-fit: contain; }
+.kept .item .ck { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 14px; font-weight: 800; color: transparent; border: 2px solid rgba(255,255,255,.85); background: rgba(0,0,0,.35); }
+.kept .item.sel .frame { border-color: var(--accent); }
+.kept .item.sel .ck { background: var(--accent); border-color: var(--accent); color: #111; }
 .kept .item small { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.kept .item .del { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; min-height: 26px; padding: 0; border-radius: 50%; background: rgba(0,0,0,.7); font-size: 13px; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--bg); padding: 3px; border-radius: 10px; }
+.tabs button { min-height: 34px; border: 0; background: transparent; color: var(--muted); font-weight: 700; }
+.tabs button.on { background: var(--panel); color: var(--fg); border: 1px solid var(--line); }
+/* 選んだときの操作。一覧をスクロールしても上に残す */
+.kept-bar { position: sticky; top: -16px; z-index: 2; display: flex; gap: 8px; align-items: center; justify-content: center; min-height: 44px; background: var(--panel); padding: 4px 0; }
+.kept-hint { color: var(--muted); font-size: 12px; }
+button.danger { background: var(--danger); color: #fff; border-color: var(--danger); font-weight: 700; }
+.undo { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); font-size: 13px; }
+.undo button { min-height: 32px; color: var(--accent); }
 .kept-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 12px 0; }
 .update {
   position: absolute; left: 50%; top: 48px; transform: translateX(-50%); z-index: 20;
@@ -338,7 +353,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 <main class="stage" id="stage">
   <div class="topbar">
     <button class="gear" id="gearBtn" aria-label="設定を開く">⚙︎ 設定</button>
-    <button id="keepBtn" type="button">保存したビフォー</button>
+    <button id="keepBtn" type="button">保存した写真</button>
+    <button id="makeBtn" type="button">写真から作る</button>
   </div>
   <div class="pair" id="pair">
     <div class="pane" id="paneL">
@@ -460,16 +476,25 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   <canvas id="ckBeforeLines"></canvas>
 </div>
 
-<!-- 保存したビフォー（呼び出し）、ビフォーを写真に保存、写真から並べて作る -->
+<!-- 保存した写真：ビフォー／ビフォーアフター -->
 <div class="sheet-back" id="keepSheet" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="keepTitle">
-    <h2 id="keepTitle">保存したビフォー</h2>
-    <p class="note">ビフォーは撮るたびに、この端末のアプリの中に保存されます（新しい30枚まで）。タップすると呼び出して、アフターを撮れます。</p>
-    <div class="kept" id="keptList"></div>
+    <h2 id="keepTitle">保存した写真</h2>
+    <div class="tabs" role="tablist">
+      <button id="tabB" type="button" role="tab">ビフォー</button>
+      <button id="tabP" type="button" role="tab">ビフォーアフター</button>
+    </div>
+    <p class="note" id="keptNote"></p>
     <button id="saveBeforeBtn" type="button">今のビフォーを写真に保存</button>
-    <button id="layoutBtn" type="button">写真から並べて作る（撮影しない）</button>
-    <p class="note">「写真から並べて作る」は、完成画面の左（ビフォー）・右（アフター）をタップして、写真アプリから選びます。</p>
-    <p class="note">ホーム画面に追加して使うと、保存したビフォーが消えにくくなります。大事なビフォーは「今のビフォーを写真に保存」で写真アプリにも残してください。</p>
+    <div class="kept-bar" id="keptBar">
+      <span class="kept-hint" id="keptHint">タップで選ぶ・横になぞるとまとめて選べます</span>
+      <button class="primary" id="keptOpen" type="button" hidden>開く</button>
+      <button class="danger" id="keptDel" type="button" hidden>削除</button>
+      <button class="small" id="keptClear" type="button" hidden>選択解除</button>
+    </div>
+    <div class="undo" id="undoBar" hidden><span id="undoText"></span><button id="undoBtn" type="button">元に戻す</button></div>
+    <div class="kept" id="keptList"></div>
+    <p class="note">ホーム画面に追加して使うと、保存した写真が消えにくくなります。大事なものは写真アプリにも保存してください。</p>
     <button class="primary" id="keepClose">閉じる</button>
   </div>
 </div>
@@ -940,7 +965,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     renderMatch();
     $('pickLabel').textContent = isB ? 'ビフォーを写真から選ぶ' : 'アフターを写真から選ぶ';
     $('redoBefore').classList.toggle('invis', !isA);
-    $('keepBtn').classList.toggle('invis', isR);
+    $('makeBtn').classList.toggle('invis', !isB);
     renderLens();
     updateLevel();
   }
@@ -958,6 +983,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 
   // 画面のビフォーは切り抜く前の写真を枠いっぱいに表示する（枠の比率で自動的に切り抜かれて見える）
   async function setBefore(full, opt = {}) {
+    newProject();
     await prepareBefore(full, opt);
     await go('after');
   }
@@ -982,7 +1008,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   }
 
   async function setAfter(full) {
-    afterFull = full;
+    afterFull = full; imagesDirty = true;
     afterCanvas = cropOf(full);
     await buildResult();
     await go('result');
@@ -995,6 +1021,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     resultURL = URL.createObjectURL(resultBlob);
     $('resultImg').src = resultURL;
     $('resultImg').onload = sizeSlider;
+    if (beforeCanvas && afterCanvas) saveProject(c);   // 作るたび・直すたびに保存（同じ作品は上書き）
   }
 
   // ---------- 完成画面：重ねて確認 ----------
@@ -1830,7 +1857,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('opacity').oninput = (e) => { opacity = +e.target.value; store.set('opacity', opacity); render(); };
   $('redoBefore').onclick = () => go('before');
   $('retakeAfter').onclick = () => { if (!beforeCanvas) { msg('先にビフォーを選んでください（左をタップ）'); return; } go('after'); };
-  $('newBtn').onclick = () => { beforeCanvas = afterCanvas = beforeFull = afterFull = null; go('before'); };
+  $('newBtn').onclick = () => { beforeCanvas = afterCanvas = beforeFull = afterFull = null; newProject(); go('before'); };
 
   // 比率の切り替え。撮った写真は切り抜く前のものから作り直す
   function applyRatioCss() { document.documentElement.style.setProperty('--pair', String(AR * 2)); }
@@ -1840,7 +1867,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (afterFull) afterCanvas = cropOf(afterFull);
     matchScore = null; guide = null; holdSince = 0;
     render();
-    if (state === 'result' && beforeCanvas && afterCanvas) await buildResult();
+    if (state === 'result') await buildResult();
   }
   const nextRatio = () => setRatio((ratioIdx + 1) % RATIOS.length);
   $('ratioBtn').onclick = nextRatio;
@@ -1901,50 +1928,66 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (resultBlob) await shareImage(resultBlob, `BA_${stamp()}.jpg`);
   };
 
-  // ---------- 保存したビフォー：撮るたびにこの端末（IndexedDB）に残し、あとで呼び出してアフターを撮れる ----------
-  const KEEP_MAX = 30;
-  const keepDB = (() => {
+  // ---------- 保存した写真：ビフォー（撮るたびに）と、ビフォーアフター（作るたびに）をこの端末（IndexedDB）に残す ----------
+  // ビフォーは呼び出してアフターを撮れる。ビフォーアフターは開き直して、文字・比率などをあとから直せる
+  const KEEP_MAX = 30, PROJ_MAX = 30;
+  const db = (() => {
     let opening = null;
     const open = () => opening || (opening = new Promise((res, rej) => {
-      const r = indexedDB.open('zengo', 1);
-      r.onupgradeneeded = () => r.result.createObjectStore('befores', { keyPath: 'id' });
+      const r = indexedDB.open('zengo', 2);
+      r.onupgradeneeded = () => {
+        const d = r.result;
+        if (!d.objectStoreNames.contains('befores')) d.createObjectStore('befores', { keyPath: 'id' });
+        if (!d.objectStoreNames.contains('projects')) d.createObjectStore('projects', { keyPath: 'id' });
+      };
       r.onsuccess = () => res(r.result); r.onerror = () => { opening = null; rej(r.error); };
     }));
-    const run = async (mode, fn) => {
-      const db = await open();
+    const run = async (store, mode, fn) => {
+      const d = await open();
       return new Promise((res, rej) => {
-        const t = db.transaction('befores', mode), req = fn(t.objectStore('befores'));
+        const t = d.transaction(store, mode), req = fn(t.objectStore(store));
         t.oncomplete = () => res(req ? req.result : undefined); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
       });
     };
-    return { put: (v) => run('readwrite', st => st.put(v)), del: (id) => run('readwrite', st => st.delete(id)), all: () => run('readonly', st => st.getAll()) };
+    const api = (store) => ({
+      put: (v) => run(store, 'readwrite', st => st.put(v)),
+      get: (id) => run(store, 'readonly', st => st.get(id)),
+      del: (id) => run(store, 'readwrite', st => st.delete(id)),
+      all: () => run(store, 'readonly', st => st.getAll()),
+    });
+    return { befores: api('befores'), projects: api('projects') };
   })();
   try { navigator.storage?.persist?.().catch(() => {}); } catch {}
-  async function keepBefore(full) {
-    const blob = await toBlob(full, 0.9);
-    const th = document.createElement('canvas'), k = 240 / Math.max(full.width, full.height);
-    th.width = Math.round(full.width * k); th.height = Math.round(full.height * k);
-    th.getContext('2d').drawImage(full, 0, 0, th.width, th.height);
-    await keepDB.put({ id: Date.now(), blob, thumb: th.toDataURL('image/jpeg', 0.7), tilt: tiltBefore ? { ...tiltBefore } : null });
-    const all = (await keepDB.all()).sort((a, b) => b.id - a.id);
-    for (const r of all.slice(KEEP_MAX)) await keepDB.del(r.id);
+  async function prune(st, max) {
+    const all = (await st.all()).sort((a, b) => b.id - a.id);
+    for (const r of all.slice(max)) await st.del(r.id);
   }
-  const fmtDate = (id) => { const d = new Date(id), p = (n) => String(n).padStart(2, '0'); return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
-  async function renderKept() {
-    const box = $('keptList'); box.innerHTML = '';
-    let all = [];
-    try { all = (await keepDB.all()).sort((a, b) => b.id - a.id); } catch {}
-    if (!all.length) { box.innerHTML = '<div class="kept-empty" style="grid-column: 1 / -1">まだありません</div>'; return; }
-    for (const r of all) {
-      const it = document.createElement('div'); it.className = 'item';
-      const pick = document.createElement('button'); pick.type = 'button'; pick.className = 'pick'; pick.setAttribute('aria-label', fmtDate(r.id) + ' のビフォーを呼び出す');
-      const im = document.createElement('img'); im.src = r.thumb; im.alt = ''; pick.appendChild(im);
-      pick.onclick = () => recallBefore(r);
-      const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '✕'; del.setAttribute('aria-label', fmtDate(r.id) + ' のビフォーを消す');
-      del.onclick = async () => { if (!confirm('このビフォーを消しますか？')) return; await keepDB.del(r.id); renderKept(); };
-      const dt = document.createElement('small'); dt.textContent = fmtDate(r.id);
-      it.append(pick, del, dt); box.appendChild(it);
-    }
+  function thumbOf(src, size) {
+    const th = document.createElement('canvas'), k = size / Math.max(src.width, src.height);
+    th.width = Math.round(src.width * k); th.height = Math.round(src.height * k);
+    th.getContext('2d').drawImage(src, 0, 0, th.width, th.height);
+    return th.toDataURL('image/jpeg', 0.7);
+  }
+  async function keepBefore(full) {
+    await db.befores.put({ id: Date.now(), blob: await toBlob(full, 0.9), thumb: thumbOf(full, 240), tilt: tiltBefore ? { ...tiltBefore } : null });
+    await prune(db.befores, KEEP_MAX);
+  }
+
+  // ビフォーアフター（作品）：完成画面を作るたびに保存。同じ作品を直したときは上書き
+  let projectId = null, projectBlobs = null, imagesDirty = true, projectSaving = Promise.resolve();
+  function newProject() { projectId = null; projectBlobs = null; imagesDirty = true; }
+  function saveProject(c) {
+    if (!beforeFull || !afterFull) return;
+    const snap = { bf: beforeFull, af: afterFull, dirty: imagesDirty, thumb: thumbOf(c, 360),
+      ratio: RATIOS[ratioIdx].key, labels: $('labelToggle').checked, style: LABEL_STYLES[labelStyle].key, pos: LABEL_POS[labelPos].key };
+    imagesDirty = false;
+    projectSaving = projectSaving.then(async () => {
+      if (snap.dirty || !projectBlobs) projectBlobs = { before: await toBlob(snap.bf, 0.9), after: await toBlob(snap.af, 0.9) };
+      if (!projectId) projectId = Date.now();
+      await db.projects.put({ id: projectId, updated: Date.now(), before: projectBlobs.before, after: projectBlobs.after, thumb: snap.thumb,
+        ratio: snap.ratio, labels: snap.labels, style: snap.style, pos: snap.pos });
+      await prune(db.projects, PROJ_MAX);
+    }).catch(() => {});
   }
   async function blobToCanvas(blob) {
     const url = URL.createObjectURL(blob);
@@ -1960,21 +2003,137 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       await setBefore(c);
     } catch { msg('このビフォーを読み込めませんでした'); }
   }
-  // 左上のボタン：ビフォー画面では「保存したビフォー」、アフター画面では「ビフォーを写真に保存」
-  // 左上の「保存したビフォー」：ビフォー画面でもアフター画面でも開ける。アフター画面では今のビフォーを写真に保存できる
+  async function openProject(r) {
+    try {
+      const [b, a] = await Promise.all([blobToCanvas(r.before), blobToCanvas(r.after)]);
+      $('keepSheet').hidden = true;
+      const ri = RATIOS.findIndex(x => x.key === r.ratio); if (ri >= 0) { ratioIdx = ri; AR = RATIOS[ri].ar; store.set('ratio', r.ratio); applyRatioCss(); }
+      const si = LABEL_STYLES.findIndex(x => x.key === r.style); if (si >= 0) labelStyle = si;
+      const pi = LABEL_POS.findIndex(x => x.key === r.pos); if (pi >= 0) labelPos = pi;
+      $('labelToggle').checked = !!r.labels;
+      tiltBefore = null;
+      await prepareBefore(b, { analyze: false });
+      afterFull = a; afterCanvas = cropOf(a);
+      projectId = r.id; projectBlobs = { before: r.before, after: r.after }; imagesDirty = false;
+      await buildResult();
+      await go('result');
+    } catch { msg('このビフォーアフターを読み込めませんでした'); }
+  }
+
+  // ---------- 一覧：タップで選ぶ、横になぞるとまとめて選ぶ。選ぶと「開く」「削除」が出る。消したあと「元に戻す」 ----------
+  const fmtDate = (id) => { const d = new Date(id), p = (n) => String(n).padStart(2, '0'); return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  let keptTab = 'befores', keptRecs = [], keptSel = new Set(), undoData = null, undoTimer = null;
+  async function renderKept() {
+    $('tabB').classList.toggle('on', keptTab === 'befores'); $('tabB').setAttribute('aria-selected', String(keptTab === 'befores'));
+    $('tabP').classList.toggle('on', keptTab === 'projects'); $('tabP').setAttribute('aria-selected', String(keptTab === 'projects'));
+    $('saveBeforeBtn').hidden = !(keptTab === 'befores' && state === 'after' && beforeFull);
+    $('keptNote').textContent = keptTab === 'befores'
+      ? 'ビフォーは撮るたびに保存されます（新しい30枚まで）。開くと、そのビフォーでアフターを撮れます。'
+      : 'ビフォーアフターは作るたびに保存されます（新しい30件まで）。開くと、文字や比率をあとから直せます。';
+    const box = $('keptList'); box.innerHTML = ''; box.classList.toggle('wide', keptTab === 'projects');
+    try { keptRecs = (await db[keptTab].all()).sort((a, b) => b.id - a.id); } catch { keptRecs = []; }
+    keptSel = new Set([...keptSel].filter(id => keptRecs.some(r => r.id === id)));
+    if (!keptRecs.length) box.innerHTML = '<div class="kept-empty" style="grid-column: 1 / -1">まだありません</div>';
+    keptRecs.forEach((r, i) => {
+      const it = document.createElement('div'); it.className = 'item'; it.dataset.i = i;
+      it.setAttribute('role', 'checkbox'); it.tabIndex = 0;
+      it.setAttribute('aria-label', fmtDate(r.updated || r.id) + (keptTab === 'befores' ? ' のビフォー' : ' のビフォーアフター'));
+      const fr = document.createElement('div'); fr.className = 'frame';
+      const im = document.createElement('img'); im.src = r.thumb; im.alt = ''; im.draggable = false; fr.appendChild(im);
+      const ck = document.createElement('span'); ck.className = 'ck'; ck.textContent = '✓'; fr.appendChild(ck);
+      const dt = document.createElement('small'); dt.textContent = fmtDate(r.updated || r.id);
+      it.append(fr, dt); box.appendChild(it);
+      it.onkeydown = (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleSel(r.id); } };
+    });
+    paintSel();
+  }
+  function paintSel() {
+    $('keptList').querySelectorAll('.item').forEach(it => {
+      const on = keptSel.has(keptRecs[+it.dataset.i].id);
+      it.classList.toggle('sel', on); it.setAttribute('aria-checked', String(on));
+    });
+    const n = keptSel.size, bar = $('keptBar');
+    $('keptOpen').hidden = n !== 1;
+    $('keptDel').hidden = n === 0; $('keptDel').textContent = n > 1 ? `削除（${n}枚）` : '削除';
+    $('keptClear').hidden = n === 0;
+    $('keptHint').hidden = n !== 0;
+    bar.classList.toggle('active', n > 0);
+  }
+  function toggleSel(id) { keptSel.has(id) ? keptSel.delete(id) : keptSel.add(id); paintSel(); }
+  // なぞって選ぶ：横に動かし始めたら選ぶ（縦はスクロール）。動かした範囲をまとめて選ぶ／外す
+  {
+    const box = $('keptList');
+    let drag = null;
+    const itemAt = (x, y) => { const el = document.elementFromPoint(x, y); const it = el && el.closest('#keptList .item'); return it ? +it.dataset.i : null; };
+    box.addEventListener('pointerdown', (e) => {
+      const it = e.target.closest('.item'); if (!it) return;
+      drag = { start: +it.dataset.i, x: e.clientX, y: e.clientY, mode: null, base: new Set(keptSel), id: e.pointerId };
+    });
+    box.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag.mode) {
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+        if (Math.hypot(dx, dy) < 10) return;
+        if (Math.abs(dx) >= Math.abs(dy) || e.pointerType === 'mouse') {
+          drag.mode = 'select'; drag.add = !keptSel.has(keptRecs[drag.start].id);
+          try { box.setPointerCapture(e.pointerId); } catch {}
+        } else { drag.mode = 'scroll'; return; }
+      }
+      if (drag.mode !== 'select') return;
+      e.preventDefault();
+      const i = itemAt(e.clientX, e.clientY); if (i == null) return;
+      keptSel = new Set(drag.base);
+      for (let k = Math.min(drag.start, i); k <= Math.max(drag.start, i); k++) drag.add ? keptSel.add(keptRecs[k].id) : keptSel.delete(keptRecs[k].id);
+      paintSel();
+    });
+    box.addEventListener('touchmove', (e) => { if (drag && drag.mode === 'select') e.preventDefault(); }, { passive: false });
+    box.addEventListener('pointerup', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag.mode) toggleSel(keptRecs[drag.start].id);   // 動かさずに離した＝タップ
+      drag = null;
+    });
+    box.addEventListener('pointercancel', () => { drag = null; });
+  }
+  $('keptOpen').onclick = () => {
+    const r = keptRecs.find(x => keptSel.has(x.id)); if (!r) return;
+    keptSel.clear();
+    keptTab === 'befores' ? recallBefore(r) : openProject(r);
+  };
+  $('keptClear').onclick = () => { keptSel.clear(); paintSel(); };
+  $('keptDel').onclick = async () => {
+    const tab = keptTab, recs = keptRecs.filter(r => keptSel.has(r.id));
+    if (!recs.length) return;
+    for (const r of recs) await db[tab].del(r.id);
+    if (tab === 'projects' && recs.some(r => r.id === projectId)) projectId = null;
+    keptSel.clear();
+    undoData = { tab, recs };
+    $('undoText').textContent = `${recs.length}${tab === 'befores' ? '枚' : '件'}消しました`;
+    $('undoBar').hidden = false;
+    clearTimeout(undoTimer); undoTimer = setTimeout(() => { $('undoBar').hidden = true; undoData = null; }, 10000);
+    await renderKept();
+  };
+  $('undoBtn').onclick = async () => {
+    if (!undoData) return;
+    for (const r of undoData.recs) await db[undoData.tab].put(r);
+    keptTab = undoData.tab; undoData = null; $('undoBar').hidden = true; clearTimeout(undoTimer);
+    await renderKept();
+  };
+  $('tabB').onclick = () => { if (keptTab !== 'befores') { keptTab = 'befores'; keptSel.clear(); renderKept(); } };
+  $('tabP').onclick = () => { if (keptTab !== 'projects') { keptTab = 'projects'; keptSel.clear(); renderKept(); } };
+  // 左上の「保存した写真」：どの画面からでも開ける。アフター画面では、今のビフォーを写真に保存できる
   $('keepBtn').onclick = async () => {
-    if (state === 'result') return;
-    $('saveBeforeBtn').hidden = !(state === 'after' && beforeFull);
+    keptSel.clear(); $('undoBar').hidden = true; undoData = null;
+    keptTab = state === 'result' ? 'projects' : 'befores';
     await renderKept(); $('keepSheet').hidden = false; $('keepClose').focus();
   };
   $('saveBeforeBtn').onclick = async () => { if (beforeFull) await shareImage(await toBlob(beforeFull, 0.92), `Before_${stamp()}.jpg`); };
   $('keepClose').onclick = () => { $('keepSheet').hidden = true; };
   $('keepSheet').addEventListener('click', (e) => { if (e.target === $('keepSheet')) $('keepSheet').hidden = true; });
 
-  // ---------- 写真から並べて作る：完成画面の左（ビフォー）・右（アフター）をタップして、写真アプリから選ぶ ----------
-  $('layoutBtn').onclick = async () => {
-    $('keepSheet').hidden = true;
+  // ---------- 写真から作る（撮影しない）：完成画面の左（ビフォー）・右（アフター）をタップして、写真アプリから選ぶ ----------
+  $('makeBtn').onclick = async () => {
     beforeCanvas = afterCanvas = beforeFull = afterFull = null; beforeFeat = null; beforeLines = null; tiltBefore = null;
+    newProject();
     await buildResult();
     await go('result');
   };
@@ -1992,13 +2151,13 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('pickBInput').onchange = async (e) => {
     const file = e.target.files && e.target.files[0]; e.target.value = '';
     if (!file) return;
-    try { const c = await loadFile(file); tiltBefore = null; await prepareBefore(c, { analyze: false }); await buildResult(); render(); }
+    try { const c = await loadFile(file); tiltBefore = null; await prepareBefore(c, { analyze: false }); imagesDirty = true; await buildResult(); render(); }
     catch { msg('この写真は読み込めませんでした。別の写真を選んでください'); }
   };
   $('pickAInput').onchange = async (e) => {
     const file = e.target.files && e.target.files[0]; e.target.value = '';
     if (!file) return;
-    try { const c = await loadFile(file); afterFull = c; afterCanvas = cropOf(c); await buildResult(); render(); }
+    try { const c = await loadFile(file); afterFull = c; afterCanvas = cropOf(c); imagesDirty = true; await buildResult(); render(); }
     catch { msg('この写真は読み込めませんでした。別の写真を選んでください'); }
   };
   // 完成画面：ビフォーとアフターを左右入れ替える
@@ -2007,7 +2166,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (!b && !a) return;
     tiltBefore = null;
     if (a) await prepareBefore(a, { analyze: false }); else { beforeFull = beforeCanvas = beforeFeat = beforeLines = null; }
-    afterFull = b; afterCanvas = b ? cropOf(b) : null;
+    afterFull = b; afterCanvas = b ? cropOf(b) : null; imagesDirty = true;
     await buildResult(); render();
   };
 
