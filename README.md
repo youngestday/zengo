@@ -4,7 +4,7 @@
 
 左にビフォー写真、右にカメラのライブ映像を並べて撮影し、ビフォーアフター画像を1枚で保存するWebアプリです。
 
-公開URL：https://youngestday.github.io/zengo/
+公開URL：https://youngestday.github.io/pitaba/
 
 ## できること
 
@@ -46,7 +46,7 @@
 
 ほかの人に使ってもらうときは、このPDFを送ってください。URL・QRコードと、Safari で開いてホーム画面に追加する手順、使い方の流れ、困ったときをA4の2ページにまとめています。
 
-https://youngestday.github.io/zengo/docs/pitaba-guide.pdf
+https://youngestday.github.io/pitaba/docs/pitaba-guide.pdf
 
 （元のページは `docs/guide.html`。直したら、ブラウザで開いて PDF に書き出す）
 
