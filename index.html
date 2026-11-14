@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.14-7">
+<meta name="zengo-version" content="2026.11.14-8">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -39,7 +39,7 @@ body {
 
 /* ステージ */
 .stage { position: relative; container-type: size; min-width: 0; min-height: 0; display: grid; place-items: center; padding: 48px 8px 8px; }
-/* 左上のボタン（設定・保存した写真・写真から作る）の分だけ上をあけ、写真に重ならないようにする。横持ちではボタンが左下なので下をあける */
+/* 左上のボタン（設定・保存した写真）の分だけ上をあけ、写真に重ならないようにする。横持ちではボタンが左下なので下をあける */
 @media (orientation: landscape) { .stage { padding: 8px 8px 48px; } }
 .pair {
   width: min(100cqw, calc(100cqh * var(--pair, 1.125))); aspect-ratio: var(--pair, 1.125); max-width: 100%;
@@ -122,7 +122,7 @@ body {
   min-height: 32px; padding: 4px 10px; font-size: 12px; border-radius: 99px;
   background: rgba(24,25,27,.85);
 }
-#keepBtn, #makeBtn { width: 112px; padding: 4px 6px; white-space: nowrap; }
+#keepBtn { width: 112px; padding: 4px 6px; white-space: nowrap; }
 /* 保存したビフォーの一覧 */
 .kept { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; touch-action: pan-y; -webkit-user-select: none; user-select: none; }
 .kept.wide { grid-template-columns: repeat(2, 1fr); }
@@ -377,7 +377,6 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   <div class="topbar">
     <button class="gear" id="gearBtn" aria-label="設定を開く">⚙︎ 設定</button>
     <button id="keepBtn" type="button">保存した写真</button>
-    <button id="makeBtn" type="button">写真から作る</button>
   </div>
   <div class="pair" id="pair">
     <div class="pane" id="paneL">
@@ -463,9 +462,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     </div>
     <div class="zone-b">
       <label class="btn" id="pickBtn">
-        <span id="pickLabel">ビフォーを写真から選ぶ</span>
+        <span id="pickLabel"><span id="pickWho">ビフォー</span>を<br>写真から選ぶ</span>
         <input type="file" id="pickInput" accept="image/*">
       </label>
+      <!-- 左の下段：ビフォー画面では「撮らずに作る」、アフター画面では「ビフォーを撮り直す」（同じ場所・同じ大きさ） -->
       <button class="small" id="redoBefore">ビフォーを撮り直す</button>
     </div>
     </div>
@@ -1018,9 +1018,9 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('threshold').value = threshold;
     $('thresholdVal').textContent = threshold + '%';
     renderMatch();
-    $('pickLabel').textContent = isB ? 'ビフォーを写真から選ぶ' : 'アフターを写真から選ぶ';
-    $('redoBefore').classList.toggle('invis', !isA);
-    $('makeBtn').classList.toggle('invis', !isB);
+    $('pickWho').textContent = isB ? 'ビフォー' : 'アフター';
+    $('redoBefore').textContent = isB ? '撮らずに作る' : 'ビフォーを撮り直す';
+    $('redoBefore').classList.toggle('invis', isR);
     renderLens();
     updateLevel();
   }
@@ -1923,7 +1923,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   };
 
   $('opacity').oninput = (e) => { opacity = +e.target.value; store.set('opacity', opacity); render(); };
-  $('redoBefore').onclick = () => go('before');
+  $('redoBefore').onclick = () => { if (state === 'before') makeLayout(); else go('before'); };
   $('retakeAfter').onclick = () => { if (!beforeCanvas) { msg('先にビフォーを選んでください（左をタップ）'); return; } go('after'); };
   $('newBtn').onclick = () => { beforeCanvas = afterCanvas = beforeFull = afterFull = null; newProject(); go('before'); };
 
@@ -2197,7 +2197,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('keepSheet').addEventListener('click', (e) => { if (e.target === $('keepSheet')) $('keepSheet').hidden = true; });
 
   // ---------- 写真から作る（撮影しない）：完成画面の左（ビフォー）・右（アフター）をタップして、写真アプリから選ぶ ----------
-  $('makeBtn').onclick = async () => {
+  async function makeLayout() {
     beforeCanvas = afterCanvas = beforeFull = afterFull = null; beforeFeat = null; beforeLines = null; tiltBefore = null;
     newProject();
     await buildResult();
