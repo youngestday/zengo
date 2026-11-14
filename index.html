@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.14-3">
+<meta name="zengo-version" content="2026.11.14-4">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -739,6 +739,13 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   }
 
   // ---------- 画像処理 ----------
+  // 大きな作業用の画像（写真1枚分）。使わなくなったものはすぐ片付ける（iPhone は画像のメモリの上限が小さく、
+  // 片付けが遅れるとたまって、新しい画像が作れなくなる＝写真を選んでも表示されないことがある）
+  const bigs = new Set();
+  function sweep() {
+    const keep = new Set([beforeFull, afterFull, beforeCanvas, afterCanvas]);
+    for (const c of bigs) if (!keep.has(c)) { c.width = c.height = 0; bigs.delete(c); }
+  }
   function cropCover(src, sw, sh) {
     let cw, ch;
     if (sw / sh > AR) { ch = sh; cw = sh * AR; } else { cw = sw; ch = sw / AR; }
@@ -748,6 +755,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     c.width = Math.round(cw * s); c.height = Math.round(ch * s);
     const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
     g.drawImage(src, sx, sy, cw, ch, 0, 0, c.width, c.height);
+    bigs.add(c);
     return c;
   }
 
@@ -761,6 +769,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
     if (flip) { g.translate(c.width, 0); g.scale(-1, 1); }
     g.drawImage(src, sx, sy, cw, ch, 0, 0, c.width, c.height);
+    bigs.add(c);
     return c;
   }
   const cropOf = (c) => cropCover(c, c.width, c.height);
@@ -770,12 +779,31 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     return fullCanvas(video, video.videoWidth, video.videoHeight, dzoom, mirror);
   }
 
-  async function loadFile(file) {
-    const url = URL.createObjectURL(file);
-    try {
-      const img = new Image(); img.src = url; await img.decode();
-      return fullCanvas(img, img.naturalWidth, img.naturalHeight);
-    } finally { URL.revokeObjectURL(url); }
+  // 画像を読み込む。iPhone の Safari は img.decode() が、読めているのに失敗扱いになることがあるので、onload で待つ
+  function loadImage(url) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => (img.naturalWidth ? res(img) : rej(new Error('empty')));
+      img.onerror = () => rej(new Error('load'));
+      img.src = url;
+    });
+  }
+  async function loadBlob(blob) {
+    const url = URL.createObjectURL(blob);
+    try { const img = await loadImage(url); return fullCanvas(img, img.naturalWidth, img.naturalHeight); }
+    finally { URL.revokeObjectURL(url); }
+  }
+  const loadFile = loadBlob;
+  // 写真を選んでから表示されるまで（変換や下準備で時間がかかることがある）は「読み込み中」を出す。
+  // 続けて選んだときは、順番に1つずつ処理する
+  let pickQueue = Promise.resolve();
+  function withLoading(job) {
+    pickQueue = pickQueue.then(async () => {
+      msg('写真を読み込んでいます…', 0);
+      try { await job(); $('msg').hidden = true; }
+      catch (err) { console.warn(err); msg('この写真は読み込めませんでした。もう一度選ぶか、別の写真を選んでください', 6000); }
+    });
+    return pickQueue;
   }
 
   const toBlob = (c, q = 0.92) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('画像を作れませんでした')), 'image/jpeg', q));
@@ -971,7 +999,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   }
 
   async function go(next) {
-    state = next; clearCamError();
+    state = next; clearCamError(); sweep();
     if (next === 'before') { beforeEnteredAt = performance.now(); holdSince = 0; }
     if (next === 'after' && beforeCanvas && !beforeFeat) analyzeBefore();
     if (next === 'after') { lastLive = null; afterEnteredAt = performance.now(); matchScore = null; holdSince = 0; guide = null; guideOn = false; aligned = false; }
@@ -1022,6 +1050,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     $('resultImg').src = resultURL;
     $('resultImg').onload = sizeSlider;
     if (beforeCanvas && afterCanvas) saveProject(c);   // 作るたび・直すたびに保存（同じ作品は上書き）
+    c.width = c.height = 0;   // 完成画像の作業用は、書き出したらすぐ片付ける
+    sweep();
   }
 
   // ---------- 完成画面：重ねて確認 ----------
@@ -1845,13 +1875,14 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('threshold').oninput = (e) => { threshold = +e.target.value; holdSince = 0; store.set('threshold', threshold); render(); };
 
   $('pickBtn').addEventListener('click', () => askTilt());
-  $('pickInput').onchange = async (e) => {
+  $('pickInput').onchange = (e) => {
     const file = e.target.files && e.target.files[0]; e.target.value = '';
     if (!file) return;
-    try {
+    const st = state;
+    withLoading(async () => {
       const c = await loadFile(file);
-      if (state === 'before') { tiltBefore = null; await setBefore(c, { keep: true }); } else if (state === 'after') await setAfter(c);
-    } catch { msg('この写真は読み込めませんでした。別の写真を選んでください'); }
+      if (st === 'before') { tiltBefore = null; await setBefore(c, { keep: true }); } else if (st === 'after') await setAfter(c);
+    });
   };
 
   $('opacity').oninput = (e) => { opacity = +e.target.value; store.set('opacity', opacity); render(); };
@@ -1978,22 +2009,20 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   function newProject() { projectId = null; projectBlobs = null; imagesDirty = true; }
   function saveProject(c) {
     if (!beforeFull || !afterFull) return;
-    const snap = { bf: beforeFull, af: afterFull, dirty: imagesDirty, thumb: thumbOf(c, 360),
+    // 写真の書き出しはここで始める（このあと作業用の画像を片付けても、書き出す中身は変わらない）
+    const need = imagesDirty || !projectBlobs;
+    const snap = { blobs: need ? Promise.all([toBlob(beforeFull, 0.9), toBlob(afterFull, 0.9)]) : null, thumb: thumbOf(c, 360),
       ratio: RATIOS[ratioIdx].key, labels: $('labelToggle').checked, style: LABEL_STYLES[labelStyle].key, pos: LABEL_POS[labelPos].key };
     imagesDirty = false;
     projectSaving = projectSaving.then(async () => {
-      if (snap.dirty || !projectBlobs) projectBlobs = { before: await toBlob(snap.bf, 0.9), after: await toBlob(snap.af, 0.9) };
+      if (snap.blobs) { const [before, after] = await snap.blobs; projectBlobs = { before, after }; }
       if (!projectId) projectId = Date.now();
       await db.projects.put({ id: projectId, updated: Date.now(), before: projectBlobs.before, after: projectBlobs.after, thumb: snap.thumb,
         ratio: snap.ratio, labels: snap.labels, style: snap.style, pos: snap.pos });
       await prune(db.projects, PROJ_MAX);
     }).catch(() => {});
   }
-  async function blobToCanvas(blob) {
-    const url = URL.createObjectURL(blob);
-    try { const img = new Image(); img.src = url; await img.decode(); return fullCanvas(img, img.naturalWidth, img.naturalHeight); }
-    finally { URL.revokeObjectURL(url); }
-  }
+  const blobToCanvas = loadBlob;
   async function recallBefore(r) {
     try {
       const c = await blobToCanvas(r.blob);
@@ -2012,8 +2041,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
       const pi = LABEL_POS.findIndex(x => x.key === r.pos); if (pi >= 0) labelPos = pi;
       $('labelToggle').checked = !!r.labels;
       tiltBefore = null;
+      afterFull = a; afterCanvas = cropOf(a);   // 先に入れておく（片付けの対象にならないように）
       await prepareBefore(b, { analyze: false });
-      afterFull = a; afterCanvas = cropOf(a);
       projectId = r.id; projectBlobs = { before: r.before, after: r.after }; imagesDirty = false;
       await buildResult();
       await go('result');
@@ -2148,17 +2177,15 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   }
   $('resultImg').addEventListener('load', placeZones);
   window.addEventListener('resize', placeZones);
-  $('pickBInput').onchange = async (e) => {
+  $('pickBInput').onchange = (e) => {
     const file = e.target.files && e.target.files[0]; e.target.value = '';
     if (!file) return;
-    try { const c = await loadFile(file); tiltBefore = null; await prepareBefore(c, { analyze: false }); imagesDirty = true; await buildResult(); render(); }
-    catch { msg('この写真は読み込めませんでした。別の写真を選んでください'); }
+    withLoading(async () => { const c = await loadFile(file); tiltBefore = null; await prepareBefore(c, { analyze: false }); imagesDirty = true; await buildResult(); render(); });
   };
-  $('pickAInput').onchange = async (e) => {
+  $('pickAInput').onchange = (e) => {
     const file = e.target.files && e.target.files[0]; e.target.value = '';
     if (!file) return;
-    try { const c = await loadFile(file); afterFull = c; afterCanvas = cropOf(c); imagesDirty = true; await buildResult(); render(); }
-    catch { msg('この写真は読み込めませんでした。別の写真を選んでください'); }
+    withLoading(async () => { const c = await loadFile(file); afterFull = c; afterCanvas = cropOf(c); imagesDirty = true; await buildResult(); render(); });
   };
   // 完成画面：ビフォーとアフターを左右入れ替える
   $('swapBtn').onclick = async () => {
