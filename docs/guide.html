@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Zengo 使い始めガイド</title>
+<style>
+@page { size: A4; margin: 14mm 14mm 12mm; }
+:root { --ink: #1b1c1e; --muted: #5d6168; --line: #e3e4e6; --accent: #f5c518; --soft: #fff8db; --panel: #f6f6f4; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font-family: "IPAPGothic", "IPAGothic", "Hiragino Sans", "Noto Sans JP", sans-serif; color: var(--ink); font-size: 10pt; line-height: 1.5; }
+.page { page-break-after: always; height: 271mm; display: flex; flex-direction: column; overflow: hidden; }
+footer { margin-top: auto !important; }
+.page:last-child { page-break-after: auto; }
+header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid var(--ink); padding-bottom: 7px; margin-bottom: 11px; }
+header .brand { display: flex; align-items: center; gap: 12px; }
+.logo { width: 46px; height: 46px; border-radius: 11px; background: #0e0f10; display: grid; place-items: center; }
+h1 { font-size: 21pt; margin: 0; letter-spacing: .02em; line-height: 1.2; }
+h1 small { display: block; font-size: 10pt; color: var(--muted); font-weight: normal; letter-spacing: 0; margin-top: 3px; }
+header .ver { font-size: 8.5pt; color: var(--muted); text-align: right; }
+h2 { font-size: 12.5pt; margin: 13px 0 7px; padding-left: 10px; border-left: 6px solid var(--accent); line-height: 1.3; }
+.url-box { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; background: var(--soft); border: 1.5px solid var(--accent); border-radius: 12px; padding: 10px 16px; }
+.url-box .label { font-size: 9.5pt; color: var(--muted); margin-bottom: 4px; }
+.url-box .url { font-size: 15pt; font-weight: bold; letter-spacing: .01em; word-break: break-all; }
+.url-box .hint { font-size: 9pt; color: var(--muted); margin-top: 6px; }
+.url-box img { width: 96px; height: 96px; display: block; background: #fff; border-radius: 6px; }
+.url-box .qr { text-align: center; font-size: 8pt; color: var(--muted); }
+.steps { display: grid; gap: 7px; }
+.step { display: grid; grid-template-columns: 34px 1fr 146px; gap: 10px; align-items: start; border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; break-inside: avoid; }
+.num { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: #fff; font-weight: bold; display: grid; place-items: center; font-size: 13pt; }
+.step h3 { margin: 2px 0 4px; font-size: 11.5pt; }
+.step p { margin: 0 0 4px; }
+.step ul { margin: 2px 0 0; padding-left: 1.2em; }
+.step li { margin: 1px 0; }
+.note { font-size: 9pt; color: var(--muted); }
+.ill { background: var(--panel); border-radius: 10px; padding: 6px; display: grid; place-items: center; min-height: 80px; }
+.ill svg { display: block; }
+.kbd { display: inline-block; border: 1px solid #c9cbce; border-bottom-width: 2px; border-radius: 6px; padding: 0 6px; background: #fff; font-weight: bold; white-space: nowrap; }
+.ico { display: inline-block; vertical-align: -3px; }
+.flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.flow .card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 11px; break-inside: avoid; }
+.flow .card b { display: block; font-size: 10.5pt; margin-bottom: 3px; }
+.flow .card .tag { display: inline-block; font-size: 8pt; font-weight: bold; background: var(--ink); color: #fff; border-radius: 99px; padding: 0 8px; margin-bottom: 5px; }
+.flow .card p { margin: 0; font-size: 9.5pt; }
+table { width: 100%; border-collapse: collapse; font-size: 9.5pt; line-height: 1.45; }
+th, td { border-bottom: 1px solid var(--line); padding: 5px 8px; text-align: left; vertical-align: top; }
+th { width: 34%; background: var(--panel); font-weight: bold; }
+.tip { background: var(--panel); border-radius: 10px; padding: 8px 12px; font-size: 9pt; }
+.tip b { color: var(--ink); }
+footer { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 8.5pt; color: var(--muted); display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<!-- ===== 1ページ目 ===== -->
+<section class="page">
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="2" y="5" width="11.5" height="20" rx="2" fill="#9a9da3"/><rect x="16.5" y="5" width="11.5" height="20" rx="2" fill="#f5c518"/></svg>
+      </div>
+      <h1>Zengo 使い始めガイド<small>片付け・清掃のビフォーアフターを、同じ構図で撮れるカメラ</small></h1>
+    </div>
+    <div class="ver">iPhone（Safari）向け<br>インストール不要・無料で使えます</div>
+  </header>
+
+  <div class="url-box">
+    <div>
+      <div class="label">このURLを、iPhone の Safari で開いてください</div>
+      <div class="url">https://youngestday.github.io/zengo/</div>
+      <div class="hint">右のQRコードを iPhone のカメラで読み取ると、すぐに開けます。</div>
+    </div>
+    <div class="qr"><img src="qr.svg" alt="ZengoのQRコード">読み取って開く</div>
+  </div>
+
+  <h2>ホーム画面に追加する（アプリのように使えるようにする）</h2>
+  <div class="steps">
+
+    <div class="step">
+      <div class="num">1</div>
+      <div>
+        <h3>Safari で URL を開く</h3>
+        <p>上の URL を <b>Safari</b> で開きます（QRコードを読み取ってもOK）。</p>
+        <p class="note">LINE やメールの中で開いた場合は、右下などのメニューから「Safariで開く」を選んでください。</p>
+      </div>
+      <div class="ill">
+        <!-- Safari のアイコン -->
+        <svg width="70" height="70" viewBox="0 0 70 70" aria-hidden="true">
+          <rect x="3" y="3" width="64" height="64" rx="15" fill="#fff" stroke="#d6d7da"/>
+          <circle cx="35" cy="35" r="24" fill="#2f8cff"/><circle cx="35" cy="35" r="20" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="1 3"/>
+          <polygon points="35,15 40,35 35,55 30,35" fill="#ff3b30" transform="rotate(45 35 35)"/>
+          <polygon points="35,35 40,35 35,55 30,35" fill="#fff" transform="rotate(45 35 35)"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div>
+        <h3>共有ボタンを押す</h3>
+        <p>画面の下（または上）にある <b>共有ボタン</b>
+          <svg class="ico" width="16" height="18" viewBox="0 0 16 18" aria-hidden="true"><path d="M8 1v11M4 5l4-4 4 4" fill="none" stroke="#2f7bff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8H2.5v8.5h11V8H11" fill="none" stroke="#2f7bff" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          （四角から上向きの矢印）を押します。</p>
+        <p class="note">見つからないときは、アドレスバーの横の <span class="kbd">…</span> を押してから「共有」を選んでください（iOS の版によって場所が違います）。</p>
+      </div>
+      <div class="ill">
+        <svg width="132" height="80" viewBox="0 0 132 80" aria-hidden="true">
+          <rect x="1" y="1" width="130" height="78" rx="10" fill="#fff" stroke="#d6d7da"/>
+          <rect x="10" y="12" width="112" height="20" rx="10" fill="#eef0f2"/>
+          <text x="66" y="26" font-size="9" text-anchor="middle" fill="#5d6168" font-family="sans-serif">youngestday.github.io</text>
+          <g transform="translate(19 46)" fill="none" stroke="#9a9da3" stroke-width="2" stroke-linecap="round"><path d="M8 3 2 9l6 6"/></g>
+          <g transform="translate(44 46)" fill="none" stroke="#9a9da3" stroke-width="2" stroke-linecap="round"><path d="M2 3l6 6-6 6"/></g>
+          <circle cx="76" cy="55" r="14" fill="#fff8db" stroke="#f5c518" stroke-width="2"/>
+          <g transform="translate(69 44)"><path d="M7 1v11M3 5l4-4 4 4" fill="none" stroke="#2f7bff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 8H1.5v9h11V8H10" fill="none" stroke="#2f7bff" stroke-width="1.8" stroke-linejoin="round"/></g>
+          <g transform="translate(100 47)" fill="none" stroke="#9a9da3" stroke-width="1.8"><path d="M2 2h8a3 3 0 0 1 3 3v11l-7-4-7 4V5"/></g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div>
+        <h3>「ホーム画面に追加」を選ぶ</h3>
+        <p>出てきたメニューを下へスクロールして <b>「ホーム画面に追加」</b>
+          <svg class="ico" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="14" height="14" rx="3.5" fill="none" stroke="#1b1c1e" stroke-width="1.5"/><path d="M8 4.5v7M4.5 8h7" stroke="#1b1c1e" stroke-width="1.5" stroke-linecap="round"/></svg>
+          を押します。</p>
+        <p>「Webアプリとして開く」が出ている場合は <b>オン</b> のままにして、右上の <span class="kbd">追加</span> を押します。</p>
+      </div>
+      <div class="ill">
+        <svg width="132" height="84" viewBox="0 0 132 84" aria-hidden="true">
+          <rect x="1" y="1" width="130" height="82" rx="10" fill="#fff" stroke="#d6d7da"/>
+          <text x="12" y="20" font-size="9" fill="#9a9da3" font-family="sans-serif">リーディングリストに追加</text>
+          <line x1="10" y1="28" x2="122" y2="28" stroke="#eef0f2"/>
+          <rect x="6" y="32" width="120" height="22" rx="6" fill="#fff8db" stroke="#f5c518" stroke-width="1.5"/>
+          <text x="12" y="47" font-size="9.5" font-weight="bold" fill="#1b1c1e" font-family="IPAGothic, sans-serif">ホーム画面に追加</text>
+          <g transform="translate(106 37)"><rect x="0" y="0" width="12" height="12" rx="3" fill="none" stroke="#1b1c1e" stroke-width="1.3"/><path d="M6 3v6M3 6h6" stroke="#1b1c1e" stroke-width="1.3" stroke-linecap="round"/></g>
+          <line x1="10" y1="60" x2="122" y2="60" stroke="#eef0f2"/>
+          <text x="12" y="74" font-size="9" fill="#9a9da3" font-family="sans-serif">マークアップ</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">4</div>
+      <div>
+        <h3>ホーム画面の「Zengo」から開く</h3>
+        <p>ホーム画面に <b>Zengo</b> のアイコンができます。次からは、このアイコンから開いてください。</p>
+        <ul>
+          <li>最初に「カメラへのアクセス」をたずねられたら <span class="kbd">許可</span> を押します。</li>
+          <li>画面をタップして「動作と方向へのアクセス」をたずねられたら <span class="kbd">許可</span> を押します（水平・垂直のガイドに使います）。</li>
+        </ul>
+      </div>
+      <div class="ill">
+        <svg width="132" height="84" viewBox="0 0 132 84" aria-hidden="true">
+          <rect x="1" y="1" width="130" height="82" rx="10" fill="#e9eef5" stroke="#d6d7da"/>
+          <g fill="#c9d3e0"><rect x="14" y="12" width="22" height="22" rx="6"/><rect x="42" y="12" width="22" height="22" rx="6"/><rect x="70" y="12" width="22" height="22" rx="6"/><rect x="98" y="12" width="22" height="22" rx="6"/><rect x="14" y="46" width="22" height="22" rx="6"/></g>
+          <rect x="40" y="44" width="26" height="26" rx="7" fill="#0e0f10" stroke="#f5c518" stroke-width="2"/>
+          <rect x="45" y="50" width="7" height="14" rx="1.5" fill="#9a9da3"/><rect x="54" y="50" width="7" height="14" rx="1.5" fill="#f5c518"/>
+          <text x="53" y="80" font-size="8" text-anchor="middle" fill="#1b1c1e" font-family="sans-serif">Zengo</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip" style="margin-top:8px"><b>なぜホーム画面に追加するの？</b>　アプリのように全画面で使えて、撮った写真の保存（アプリの中の「保存した写真」）も消えにくくなります。Safari のまま使うと、しばらく開かなかったときに保存が消えることがあります。</div>
+
+  <footer><span>Zengo 使い始めガイド</span><span>1 / 2</span></footer>
+</section>
+
+<!-- ===== 2ページ目 ===== -->
+<section class="page">
+  <h2 style="margin-top:0">使い方の流れ</h2>
+  <div class="flow">
+    <div class="card"><span class="tag">1</span><b>ビフォーを撮る</b><p>左側がカメラになります。シャッターで撮影。写真アプリから選ぶこともできます。</p></div>
+    <div class="card"><span class="tag">2</span><b>アフターを合わせる</b><p>右側のカメラに、ビフォーの輪郭が線で重なります。線に合わせると「ピタッ！」と知らせます。</p></div>
+    <div class="card"><span class="tag">3</span><b>アフターを撮る</b><p>シャッターで撮影。「自動撮影ON」なら、ピタッと合ったところで自動で撮れます。</p></div>
+    <div class="card"><span class="tag">4</span><b>保存・共有</b><p>左右に並んだ1枚ができます。「保存・共有」→「画像を保存」で写真アプリへ。</p></div>
+  </div>
+
+  <h2>覚えておくと便利なこと</h2>
+  <table>
+    <tr><th>撮らずに作りたい</th><td>最初の画面の左上 <b>「写真から作る」</b>。左右の枠をタップして、写真アプリからビフォーとアフターを選びます。</td></tr>
+    <tr><th>あとの日にアフターを撮りたい</th><td>ビフォーは撮るたびに自動で残ります。左上 <b>「保存した写真」</b> →「ビフォー」から選んで「開く」。</td></tr>
+    <tr><th>文字やデザインを直したい</th><td><b>「保存した写真」</b> →「ビフォーアフター」から選んで「開く」。完成画面の「文字のデザイン」で書体（5種類）と位置を変えられます。</td></tr>
+    <tr><th>構図を合わせやすくしたい</th><td>画面中央の水平線（左右の傾き）と、下のスマホ形の枠（前後の傾き）が黄色になると、まっすぐです。「ガイドON」で、動かす方向を矢印で教えます。</td></tr>
+    <tr><th>ずれを確かめたい</th><td>完成画面の <b>「重なりチェック」</b> のつまみを左へ滑らせると、ビフォーとアフターが重なります。</td></tr>
+  </table>
+
+  <h2>困ったとき</h2>
+  <table>
+    <tr><th>カメラが映らない</th><td>iPhone の「設定」→「アプリ」→「Safari」→「カメラ」を「許可」（または「確認」）にしてから、Zengo を開き直してください。Safari で開いている場合は、アドレスバーの <span class="kbd">ぁあ</span>（または <span class="kbd">…</span>）→「Webサイトの設定」→「カメラ」でも変えられます。</td></tr>
+    <tr><th>水平・垂直のガイドが出ない</th><td>画面を一度タップして、「動作と方向へのアクセス」を <span class="kbd">許可</span> してください。</td></tr>
+    <tr><th>音が鳴らない</th><td>消音（マナーモード）では鳴らないことがあります。左上の「設定」で、ピタッの音・シャッター音をオン／オフできます。</td></tr>
+    <tr><th>「新しい版があります」と出た</th><td><span class="kbd">更新する</span> を押すと、最新の版になります。撮った写真の保存はそのまま残ります。</td></tr>
+    <tr><th>大事な写真を残したい</th><td>アプリの中の保存は、この iPhone の中だけです。大事なものは「保存・共有」で写真アプリにも保存してください。</td></tr>
+    <tr><th>Android で使いたい</th><td>Chrome で URL を開き、右上の <span class="kbd">⋮</span> →「ホーム画面に追加」（または「アプリをインストール」）を選んでください。</td></tr>
+  </table>
+
+  <div class="url-box" style="margin-top:12px; padding:8px 14px">
+    <div>
+      <div class="label">ほかの人に紹介するときは、この URL か QRコードを送ってください</div>
+      <div class="url" style="font-size:13pt">https://youngestday.github.io/zengo/</div>
+    </div>
+    <div class="qr"><img src="qr.svg" alt="ZengoのQRコード" style="width:78px;height:78px"></div>
+  </div>
+
+  <footer><span>Zengo 使い始めガイド</span><span>2 / 2</span></footer>
+</section>
+
+</body>
+</html>

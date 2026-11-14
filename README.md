@@ -36,6 +36,14 @@
   - 書体は iPhone に入っているもの（ヒラギノ明朝、Didot、Avenir Next、ヒラギノ丸ゴシックなど）を使うので、電波がなくても保存画像に入る
 - 「保存・共有」から写真アプリに保存
 
+## 配布用のガイド（PDF）
+
+ほかの人に使ってもらうときは、このPDFを送ってください。URL・QRコードと、Safari で開いてホーム画面に追加する手順、使い方の流れ、困ったときをA4の2ページにまとめています。
+
+https://youngestday.github.io/zengo/docs/zengo-guide.pdf
+
+（元のページは `docs/guide.html`。直したら、ブラウザで開いて PDF に書き出す）
+
 ## 使い方
 
 1. iPhoneのSafariかChromeで上のURLを開き、カメラの使用を「許可」する
