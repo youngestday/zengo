@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Zengo">
 <meta name="theme-color" content="#0e0f10">
 <title>Zengo</title>
-<meta name="zengo-version" content="2026.11.13-35">
+<meta name="zengo-version" content="2026.11.14-1">
 <style>
 /* 撮影画面：左にビフォー、右にライブカメラ。横向きでは操作列が右、縦向きでは下。暗いカメラ画面に固定。 */
 :root {
@@ -114,13 +114,23 @@ body {
   100% { transform: translate(-50%, -50%) scale(1);  opacity: 0 }
 }
 @media (prefers-reduced-motion: reduce) { .pita.pop { animation: none; opacity: 0; } }
-.gear {
-  position: absolute; z-index: 6; top: 8px; left: 8px;
+/* 左上（横持ちでは左下）：設定と、ビフォーの呼び出し／保存。どの画面でも同じ場所・同じ大きさ */
+.topbar { position: absolute; z-index: 6; top: 8px; left: 8px; display: flex; gap: 6px; }
+.gear, .topbar button {
   min-height: 32px; padding: 4px 10px; font-size: 12px; border-radius: 99px;
   background: rgba(24,25,27,.85);
 }
+#keepBtn { width: 150px; padding: 4px 6px; white-space: nowrap; }
+/* 保存したビフォーの一覧 */
+.kept { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.kept .item { position: relative; display: grid; gap: 2px; justify-items: center; }
+.kept .item > button.pick { padding: 0; min-height: 0; border-radius: 8px; overflow: hidden; width: 100%; aspect-ratio: 3 / 4; background: #000; }
+.kept .item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.kept .item small { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.kept .item .del { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; min-height: 26px; padding: 0; border-radius: 50%; background: rgba(0,0,0,.7); font-size: 13px; }
+.kept-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 12px 0; }
 .update {
-  position: absolute; left: 50%; top: 8px; transform: translateX(-50%); z-index: 20;
+  position: absolute; left: 50%; top: 48px; transform: translateX(-50%); z-index: 20;
   display: flex; align-items: center; gap: 10px; white-space: nowrap;
   background: rgba(20,20,22,.95); border: 1px solid var(--accent); border-radius: 12px; padding: 6px 6px 6px 12px; font-size: 13px;
 }
@@ -290,7 +300,7 @@ body {
 }
 .invis { visibility: hidden; }
 .force-vis { visibility: visible; }
-@media (orientation: landscape) { .gear { top: auto; bottom: 8px; } }
+@media (orientation: landscape) { .topbar { top: auto; bottom: 8px; } }
 .group { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
 button, .btn {
   font: inherit; font-size: 13px; color: var(--fg); background: var(--panel);
@@ -323,7 +333,10 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
 <body>
 
 <main class="stage" id="stage">
-  <button class="gear" id="gearBtn" aria-label="設定を開く">⚙︎ 設定</button>
+  <div class="topbar">
+    <button class="gear" id="gearBtn" aria-label="設定を開く">⚙︎ 設定</button>
+    <button id="keepBtn" type="button">保存したビフォー</button>
+  </div>
   <div class="pair" id="pair">
     <div class="pane" id="paneL">
       <span class="tag" id="tagL">BEFORE</span>
@@ -418,6 +431,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     <button id="designBtn" aria-label="BEFORE・AFTERの文字の書体と位置を選ぶ">文字のデザイン</button>
     <button id="ratioBtn2" aria-label="写真の縦横比を切り替える">比率 16:9</button>
     <button id="retakeAfter">アフター撮り直し</button>
+    <button class="small" id="swapBtn" aria-label="ビフォーとアフターを左右入れ替える">左右入れ替え</button>
     <button class="small" id="newBtn">最初から</button>
   </div>
 
@@ -436,6 +450,19 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   <canvas id="ckAfter"></canvas>
   <canvas id="ckBefore"></canvas>
   <canvas id="ckBeforeLines"></canvas>
+</div>
+
+<!-- 保存したビフォー（呼び出し）と、写真2枚でレイアウトだけ作る -->
+<div class="sheet-back" id="keepSheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="keepTitle">
+    <h2 id="keepTitle">保存したビフォー</h2>
+    <p class="note">ビフォーは撮るたびに、この端末のアプリの中に保存されます（新しい30枚まで）。タップすると呼び出して、アフターを撮れます。</p>
+    <div class="kept" id="keptList"></div>
+    <label class="btn" id="pick2Btn">写真2枚でレイアウトだけ作る<input type="file" id="pick2Input" accept="image/*" multiple></label>
+    <p class="note">写真アプリからビフォーとアフターの2枚を選ぶと、撮影せずに並べた1枚を作れます（古い写真がビフォーになります）。</p>
+    <p class="note">ホーム画面に追加して使うと、保存したビフォーが消えにくくなります。大事なビフォーは、アフター画面の「ビフォーを写真に保存」で写真アプリにも残してください。</p>
+    <button class="primary" id="keepClose">閉じる</button>
+  </div>
 </div>
 
 <!-- 設定 -->
@@ -884,6 +911,8 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     renderMatch();
     $('pickLabel').textContent = isB ? 'ビフォーを写真から選ぶ' : 'アフターを写真から選ぶ';
     $('redoBefore').classList.toggle('invis', !isA);
+    $('keepBtn').textContent = isA ? 'ビフォーを写真に保存' : '保存したビフォー';
+    $('keepBtn').classList.toggle('invis', isR);
     renderLens();
     updateLevel();
   }
@@ -899,7 +928,11 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   }
 
   // 画面のビフォーは切り抜く前の写真を枠いっぱいに表示する（枠の比率で自動的に切り抜かれて見える）
-  async function setBefore(full) {
+  async function setBefore(full, opt = {}) {
+    await prepareBefore(full, opt);
+    await go('after');
+  }
+  async function prepareBefore(full, { keep = false } = {}) {
     beforeFull = full;
     beforeCanvas = cropOf(full);
     beforeFeat = features(beforeCanvas, beforeCanvas.width, beforeCanvas.height);
@@ -908,7 +941,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     beforeURL = URL.createObjectURL(await toBlob(full, 0.9));
     $('beforeImg').src = beforeURL; $('overlayImg').src = beforeURL;
     lineMask = null; lineColorKey = null; $('overlayLines').removeAttribute('src');
-    await go('after');
+    if (keep) keepBefore(full).catch(() => {});
   }
 
   async function setAfter(full) {
@@ -1692,7 +1725,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     shooting = true;
     try {
       tiltBefore = tiltNow ? { ...tiltNow } : null;   // ビフォーを撮った瞬間の傾きを覚える
-      playShutter(); flash('flashL'); await setBefore(frame);
+      playShutter(); flash('flashL'); await setBefore(frame, { keep: true });
     } finally { shooting = false; holdSince = 0; }
   }
   $('shutter').onclick = async () => {
@@ -1736,7 +1769,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   });
   $('sheetClose').onclick = () => { $('sheet').hidden = true; };
   $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) $('sheet').hidden = true; });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('sheet').hidden = true; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('sheet').hidden = true; $('keepSheet').hidden = true; } });
   if (location.hash === '#test') window.__guide = { set(v) { guide = v; guideOn = true; render(); renderGuide(); } };
   if (location.hash === '#test') window.__tilt = { onOrient, get now() { return tiltNow; }, set now(v) { tiltNow = v; updateLevel(); }, set before(v) { tiltBefore = v; } };
 
@@ -1751,7 +1784,7 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
     if (!file) return;
     try {
       const c = await loadFile(file);
-      if (state === 'before') { tiltBefore = null; await setBefore(c); } else if (state === 'after') await setAfter(c);
+      if (state === 'before') { tiltBefore = null; await setBefore(c, { keep: true }); } else if (state === 'after') await setAfter(c);
     } catch { msg('この写真は読み込めませんでした。別の写真を選んでください'); }
   };
 
@@ -1809,20 +1842,139 @@ button.primary { background: var(--accent); color: #111; border-color: var(--acc
   $('designBtn').onclick = () => { designOpen = true; render(); };
   $('designDone').onclick = () => { designOpen = false; render(); };
 
-  $('saveBtn').onclick = async () => {
-    if (!resultBlob) return;
-    const d = new Date(), p = (n) => String(n).padStart(2, '0');
-    const name = `BA_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.jpg`;
-    const file = new File([resultBlob], name, { type: 'image/jpeg' });
+  // 画像を写真アプリに保存する：共有シート（「画像を保存」）を出す。使えないときはダウンロードか、画像を開いて長押しで保存
+  const stamp = () => { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
+  async function shareImage(blob, name) {
+    const file = new File([blob], name, { type: 'image/jpeg' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file] }); return; }
       catch (err) { if (err.name === 'AbortError') return; }
     }
-    const a = document.createElement('a'); a.href = resultURL; a.download = name;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
-    // 共有が使えないときは、画像だけを別の画面で開く（そこで長押しして保存できる）
-    window.open(resultURL, '_blank');
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
     msg('開いた画像を長押しして「"写真"に保存」を選んでください', 6000);
+  }
+  $('saveBtn').onclick = async () => { if (resultBlob) await shareImage(resultBlob, `BA_${stamp()}.jpg`); };
+
+  // ---------- 保存したビフォー：撮るたびにこの端末（IndexedDB）に残し、あとで呼び出してアフターを撮れる ----------
+  const KEEP_MAX = 30;
+  const keepDB = (() => {
+    let opening = null;
+    const open = () => opening || (opening = new Promise((res, rej) => {
+      const r = indexedDB.open('zengo', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('befores', { keyPath: 'id' });
+      r.onsuccess = () => res(r.result); r.onerror = () => { opening = null; rej(r.error); };
+    }));
+    const run = async (mode, fn) => {
+      const db = await open();
+      return new Promise((res, rej) => {
+        const t = db.transaction('befores', mode), req = fn(t.objectStore('befores'));
+        t.oncomplete = () => res(req ? req.result : undefined); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+      });
+    };
+    return { put: (v) => run('readwrite', st => st.put(v)), del: (id) => run('readwrite', st => st.delete(id)), all: () => run('readonly', st => st.getAll()) };
+  })();
+  try { navigator.storage?.persist?.().catch(() => {}); } catch {}
+  async function keepBefore(full) {
+    const blob = await toBlob(full, 0.9);
+    const th = document.createElement('canvas'), k = 240 / Math.max(full.width, full.height);
+    th.width = Math.round(full.width * k); th.height = Math.round(full.height * k);
+    th.getContext('2d').drawImage(full, 0, 0, th.width, th.height);
+    await keepDB.put({ id: Date.now(), blob, thumb: th.toDataURL('image/jpeg', 0.7), tilt: tiltBefore ? { ...tiltBefore } : null });
+    const all = (await keepDB.all()).sort((a, b) => b.id - a.id);
+    for (const r of all.slice(KEEP_MAX)) await keepDB.del(r.id);
+  }
+  const fmtDate = (id) => { const d = new Date(id), p = (n) => String(n).padStart(2, '0'); return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  async function renderKept() {
+    const box = $('keptList'); box.innerHTML = '';
+    let all = [];
+    try { all = (await keepDB.all()).sort((a, b) => b.id - a.id); } catch {}
+    if (!all.length) { box.innerHTML = '<div class="kept-empty" style="grid-column: 1 / -1">まだありません</div>'; return; }
+    for (const r of all) {
+      const it = document.createElement('div'); it.className = 'item';
+      const pick = document.createElement('button'); pick.type = 'button'; pick.className = 'pick'; pick.setAttribute('aria-label', fmtDate(r.id) + ' のビフォーを呼び出す');
+      const im = document.createElement('img'); im.src = r.thumb; im.alt = ''; pick.appendChild(im);
+      pick.onclick = () => recallBefore(r);
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '✕'; del.setAttribute('aria-label', fmtDate(r.id) + ' のビフォーを消す');
+      del.onclick = async () => { if (!confirm('このビフォーを消しますか？')) return; await keepDB.del(r.id); renderKept(); };
+      const dt = document.createElement('small'); dt.textContent = fmtDate(r.id);
+      it.append(pick, del, dt); box.appendChild(it);
+    }
+  }
+  async function blobToCanvas(blob) {
+    const url = URL.createObjectURL(blob);
+    try { const img = new Image(); img.src = url; await img.decode(); return fullCanvas(img, img.naturalWidth, img.naturalHeight); }
+    finally { URL.revokeObjectURL(url); }
+  }
+  async function recallBefore(r) {
+    try {
+      const c = await blobToCanvas(r.blob);
+      $('keepSheet').hidden = true;
+      tiltBefore = r.tilt || null;
+      afterCanvas = afterFull = null;
+      await setBefore(c);
+    } catch { msg('このビフォーを読み込めませんでした'); }
+  }
+  // 左上のボタン：ビフォー画面では「保存したビフォー」、アフター画面では「ビフォーを写真に保存」
+  $('keepBtn').onclick = async () => {
+    if (state === 'before') { await renderKept(); $('keepSheet').hidden = false; $('keepClose').focus(); }
+    else if (state === 'after' && beforeFull) shareImage(await toBlob(beforeFull, 0.92), `Before_${stamp()}.jpg`);
+  };
+  $('keepClose').onclick = () => { $('keepSheet').hidden = true; };
+  $('keepSheet').addEventListener('click', (e) => { if (e.target === $('keepSheet')) $('keepSheet').hidden = true; });
+
+  // ---------- 写真2枚でレイアウトだけ作る ----------
+  // 撮った日時（写真の中の記録）が古いほうをビフォーにする。わからないときは選んだ順
+  async function photoTime(file) {
+    try {
+      const v = new DataView(await file.slice(0, 256 * 1024).arrayBuffer());
+      if (v.getUint16(0) !== 0xFFD8) return null;
+      let o = 2;
+      while (o + 4 < v.byteLength) {
+        const mk = v.getUint16(o), len = v.getUint16(o + 2);
+        if (mk === 0xFFE1 && v.getUint32(o + 4) === 0x45786966) {   // "Exif"
+          const t = o + 10, le = v.getUint16(t) === 0x4949;
+          const u16 = (x) => v.getUint16(t + x, le), u32 = (x) => v.getUint32(t + x, le);
+          const find = (ifd, tag) => { const n = u16(ifd); for (let i = 0; i < n; i++) { const e = ifd + 2 + i * 12; if (u16(e) === tag) return e; } return -1; };
+          const ex = find(u32(4), 0x8769); if (ex < 0) return null;
+          const e = find(u32(ex + 8), 0x9003); if (e < 0) return null;
+          let str = ''; const at = u32(e + 8); for (let i = 0; i < 19; i++) str += String.fromCharCode(v.getUint8(t + at + i));
+          const m = str.match(/(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/);
+          return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : null;
+        }
+        if ((mk & 0xFF00) !== 0xFF00) return null;
+        o += 2 + len;
+      }
+    } catch {}
+    return null;
+  }
+  $('pick2Input').onchange = async (e) => {
+    const files = [...(e.target.files || [])]; e.target.value = '';
+    if (!files.length) return;
+    if (files.length === 1) { msg('2枚選んでください（1枚だけなら「ビフォーを写真から選ぶ」が使えます）'); return; }
+    if (files.length > 2) msg('はじめの2枚を使いました');
+    try {
+      let [a, b] = files.slice(0, 2);
+      const [ta, tb] = await Promise.all([photoTime(a), photoTime(b)]);
+      if (ta != null && tb != null && tb < ta) [a, b] = [b, a];
+      const [ca, cb] = await Promise.all([loadFile(a), loadFile(b)]);
+      $('keepSheet').hidden = true;
+      tiltBefore = null;
+      await prepareBefore(ca);
+      await setAfter(cb);
+    } catch { msg('この写真は読み込めませんでした。別の写真を選んでください'); }
+  };
+  // 完成画面：ビフォーとアフターを左右入れ替える
+  $('swapBtn').onclick = async () => {
+    if (!beforeFull || !afterFull) return;
+    const b = beforeFull, a = afterFull;
+    tiltBefore = null;
+    await prepareBefore(a);
+    afterFull = b; afterCanvas = cropOf(b);
+    await buildResult(); render();
   };
 
   function cameraAlive() {
